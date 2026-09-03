@@ -55,13 +55,10 @@ To run this modernized build, the following client extensions are strictly requi
 ```text
 BattlegroundTargets/
 ├── BattlegroundTargets.toc
-├── BattlegroundTargets.lua
+├── Localization.lua
 ├── DBUtils.lua
-├── Locales/
-│   ├── BattlegroundTargets-localization-enUS.lua
-│   ├── BattlegroundTargets-localized-bgnames.lua
-│   ├── BattlegroundTargets-localized-flag.lua
-│   └── BattlegroundTargets-localized-racenames.lua
+├── BattlegroundTargets.lua
+├── BattlegroundTargetsOpt.lua
 ├── Textures/
 │   ├── BattlegroundTargets-texture-button.tga
 │   └── Focus.tga

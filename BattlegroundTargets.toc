@@ -6,10 +6,7 @@
 ## SavedVariables: BattlegroundTargets_Options, BattlegroundTargets_HealersDB 
 ## SavedVariablesPerCharacter: BattlegroundTargets_Character
 
-Locales\BattlegroundTargets-localized-bgnames.lua
-Locales\BattlegroundTargets-localized-flag.lua
-Locales\BattlegroundTargets-localized-racenames.lua
-Locales\BattlegroundTargets-localization-enUS.lua
-
+Localization.lua
 DBUtils.lua
 BattlegroundTargets.lua
+BattlegroundTargetsOpt.lua
