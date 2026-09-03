@@ -1,0 +1,12 @@
+# Private AI Contracts (Local Only)
+CLAUDE.md
+AGENTS.md
+.agents/
+
+# Editor & OS Artifacts
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+*.bak
+*.orig
