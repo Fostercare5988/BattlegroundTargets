@@ -9,7 +9,7 @@
 
 **BattlegroundTargets** is a high-performance Enemy Unit Frame addon for World of Warcraft 1.12.1 battlegrounds (Warsong Gulch, Arathi Basin, Alterac Valley). 
 
-Originally authored by **kunda** and modernized by **Fostercare5988**, this version has been completely re-engineered from modern Classic Era (1.14.2) back to the 1.12.1 Enhanced Client, leveraging native C++ engine extensions for instantaneous exact-name targeting, zero combat lockdown restrictions, and rock-solid high-refresh framerate pacing.
+Originally authored by **kunda** and modernized by **Fostercare5988**, this version has been completely re-engineered from modern Classic Era back to the 1.12.1 Enhanced Client, leveraging native C++ engine extensions for instantaneous exact-name targeting, zero combat lockdown restrictions, and rock-solid high-refresh framerate pacing.
 
 ---
 

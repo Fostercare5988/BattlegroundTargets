@@ -196,9 +196,10 @@ function BattlegroundTargets:EnsureGlobalTables()
 	BattlegroundTargets_Options.ButtonShowTarget = { [10] = false, [15] = false, [40] = false };
 	BattlegroundTargets_Options.ButtonShowFocus = { [10] = false, [15] = false, [40] = false };
 	BattlegroundTargets_Options.ButtonShowAssist = { [10] = false, [15] = false, [40] = false };
+	BattlegroundTargets_Options.ButtonRangeCheck = { [10] = false, [15] = false, [40] = false };
 end
 BattlegroundTargets:EnsureGlobalTables();
-local MOD_VERSION = "1.14.2-Vanilla";
+local MOD_VERSION = "3.0.0";
 
 local L   = BattlegroundTargets_Localization;
 local BGN = BattlegroundTargets_BGNames;
@@ -278,7 +279,7 @@ local FRIEND_Names         = {};  -- key/value | key = friendName, value = 1
 local TARGET_Names         = {};  -- key/value | key = friendName, value = enemyName
 local SPELL_Range          = {};  -- key/value | key = spellID, value = maxRange
 local ENEMY_Healers        = {};  -- Hash table. key/value | key = Enemy name, value = table where with options: status, classToken, reason (which spell has been detected)
-local UITitle = "BattlegroundTarget |cff33ff99(JimsProxy 1.14.2)|r"
+local UITitle = "BattlegroundTargets"
 
 local testSize     = 10;
 local testIcon1    = 2;
@@ -788,13 +789,18 @@ local function RoleLayoutPosPullDownFunc(value)
 end
 
 local function Range_Display(state, GVAR_TargetButton, display, healerState)
+	GVAR_TargetButton.RangeTexture:Hide()
+	GVAR_TargetButton.RangeTexture:SetAlpha(0)
+	GVAR_TargetButton.TargetCountBackground:Hide()
+	GVAR_TargetButton.TargetCountBackground:SetAlpha(0)
+	GVAR_TargetButton.TargetCount:SetText("")
+	GVAR_TargetButton.TargetCount:Hide()
+	GVAR_TargetButton.ClassTexture:Hide()
+	GVAR_TargetButton.ClassTexture:SetAlpha(0)
 	if state or OPT.ButtonRangeCheck[currentSize] == false then
 		GVAR_TargetButton.Background:SetAlpha(1)
-		GVAR_TargetButton.TargetCountBackground:SetAlpha(1)
 		GVAR_TargetButton.ClassColorBackground:SetAlpha(1)
-		GVAR_TargetButton.RangeTexture:SetAlpha(1)
 		GVAR_TargetButton.HealthBar:SetAlpha(1)
-		GVAR_TargetButton.ClassTexture:SetAlpha(1)
 		GVAR_TargetButton.ClassColorBackground:SetTexture(GVAR_TargetButton.colR5, GVAR_TargetButton.colG5, GVAR_TargetButton.colB5, 1)
 		GVAR_TargetButton.HealthBar:SetTexture(GVAR_TargetButton.colR, GVAR_TargetButton.colG, GVAR_TargetButton.colB, 1)
 		if healerState then GVAR_TargetButton.HealersTexture:SetAlpha(1) end
@@ -2023,7 +2029,7 @@ function BattlegroundTargets:InitOptions()
 		if not OPT.ButtonShowTargetCount    then OPT.ButtonShowTargetCount    = {} end OPT.ButtonShowTargetCount[sz]    = false
 		if not OPT.ButtonShowHealthBar      then OPT.ButtonShowHealthBar      = {} end OPT.ButtonShowHealthBar[sz]      = BattlegroundTargets_Options.ButtonShowHealthBar[sz]
 		if not OPT.ButtonShowHealthText     then OPT.ButtonShowHealthText     = {} end OPT.ButtonShowHealthText[sz]     = BattlegroundTargets_Options.ButtonShowHealthText[sz]
-		if not OPT.ButtonRangeCheck         then OPT.ButtonRangeCheck         = {} end OPT.ButtonRangeCheck[sz]         = BattlegroundTargets_Options.ButtonRangeCheck[sz]
+		if not OPT.ButtonRangeCheck         then OPT.ButtonRangeCheck         = {} end OPT.ButtonRangeCheck[sz]         = false
 		if not OPT.ButtonTypeRangeCheck     then OPT.ButtonTypeRangeCheck     = {} end OPT.ButtonTypeRangeCheck[sz]     = BattlegroundTargets_Options.ButtonTypeRangeCheck[sz]
 		if not OPT.ButtonRangeDisplay       then OPT.ButtonRangeDisplay       = {} end OPT.ButtonRangeDisplay[sz]       = BattlegroundTargets_Options.ButtonRangeDisplay[sz]
 		if not OPT.ButtonSortBy             then OPT.ButtonSortBy             = {} end OPT.ButtonSortBy[sz]             = BattlegroundTargets_Options.ButtonSortBy[sz]
@@ -2154,6 +2160,7 @@ function BattlegroundTargets:CreateFrames()
 		GVAR_TargetButton.RangeTexture:SetHeight(buttonHeight - 2);
 		GVAR_TargetButton.RangeTexture:SetPoint("LEFT", GVAR_TargetButton, "LEFT", 1, 0);
 		GVAR_TargetButton.RangeTexture:SetTexture(0, 0, 0, 0);
+		GVAR_TargetButton.RangeTexture:Hide();
 		
 		GVAR_TargetButton.ClassTexture = GVAR_TargetButton:CreateTexture(nil, "BORDER");
 		GVAR_TargetButton.ClassTexture:SetWidth(buttonHeight - 2);
@@ -2200,13 +2207,16 @@ function BattlegroundTargets:CreateFrames()
 		GVAR_TargetButton.TargetCountBackground:SetHeight(buttonHeight - 2);
 		GVAR_TargetButton.TargetCountBackground:SetPoint("RIGHT", GVAR_TargetButton, "RIGHT", -1, 0);
 		GVAR_TargetButton.TargetCountBackground:SetTexture(0, 0, 0, 1);
-		GVAR_TargetButton.TargetCountBackground:SetAlpha(1);
+		GVAR_TargetButton.TargetCountBackground:SetAlpha(0);
+		GVAR_TargetButton.TargetCountBackground:Hide();
 		
 		GVAR_TargetButton.TargetCount = GVAR_TargetButton:CreateFontString(nil, "OVERLAY", "GameFontNormal");
 		GVAR_TargetButton.TargetCount:SetWidth(20);
 		GVAR_TargetButton.TargetCount:SetHeight(buttonHeight - 4);
 		GVAR_TargetButton.TargetCount:SetPoint("CENTER", GVAR_TargetButton.TargetCountBackground, "CENTER", 0, 0);
 		GVAR_TargetButton.TargetCount:SetJustifyH("CENTER");
+		GVAR_TargetButton.TargetCount:SetText("");
+		GVAR_TargetButton.TargetCount:Hide();
 		
 		GVAR_TargetButton.TargetTextureButton = CreateFrame("Button", nil, GVAR_TargetButton);
 		GVAR_TargetButton.TargetTextureButton:EnableMouse(false);
@@ -2387,7 +2397,7 @@ function BattlegroundTargets:CreateOptionsFrame()
 	BattlegroundTargets:DefaultShuffle();
 
 	local heightBase = 58; -- 10+16+10+22
-	local heightBracket = 320;
+	local heightBracket = 290;
 	local heightTotal = heightBase + heightBracket + 30 + 10;
 	
 	GVAR.OptionsFrame = CreateFrame("Frame", "BattlegroundTargets_OptionsFrame", UIParent);
@@ -2572,9 +2582,6 @@ function BattlegroundTargets:CreateOptionsFrame()
 		if GVAR.OptionsFrame.ShowRealm and GVAR.OptionsFrame.ShowRealm.Highlight then GVAR.OptionsFrame.ShowRealm.Highlight:Show(); end
 		if GVAR.OptionsFrame.ShowHealthBar and GVAR.OptionsFrame.ShowHealthBar.Highlight then GVAR.OptionsFrame.ShowHealthBar.Highlight:Show(); end
 		if GVAR.OptionsFrame.ShowHealthText and GVAR.OptionsFrame.ShowHealthText.Highlight then GVAR.OptionsFrame.ShowHealthText.Highlight:Show(); end
-		if GVAR.OptionsFrame.RangeCheck and GVAR.OptionsFrame.RangeCheck.Highlight then GVAR.OptionsFrame.RangeCheck.Highlight:Show(); end
-		if GVAR.OptionsFrame.RangeCheckTypePullDown then GVAR.OptionsFrame.RangeCheckTypePullDown:LockHighlight(); end
-		if GVAR.OptionsFrame.RangeDisplayPullDown then GVAR.OptionsFrame.RangeDisplayPullDown:LockHighlight(); end
 		if GVAR.OptionsFrame.SortByPullDown then GVAR.OptionsFrame.SortByPullDown:LockHighlight(); end
 		if GVAR.OptionsFrame.SortDetailPullDown then GVAR.OptionsFrame.SortDetailPullDown:LockHighlight(); end
 		if GVAR.OptionsFrame.FontSlider and GVAR.OptionsFrame.FontSlider.Background then GVAR.OptionsFrame.FontSlider.Background:SetTexture(1, 1, 1, 0.1); end
@@ -2587,9 +2594,6 @@ function BattlegroundTargets:CreateOptionsFrame()
 		if GVAR.OptionsFrame.ShowRealm and GVAR.OptionsFrame.ShowRealm.Highlight then GVAR.OptionsFrame.ShowRealm.Highlight:Hide(); end
 		if GVAR.OptionsFrame.ShowHealthBar and GVAR.OptionsFrame.ShowHealthBar.Highlight then GVAR.OptionsFrame.ShowHealthBar.Highlight:Hide(); end
 		if GVAR.OptionsFrame.ShowHealthText and GVAR.OptionsFrame.ShowHealthText.Highlight then GVAR.OptionsFrame.ShowHealthText.Highlight:Hide(); end
-		if GVAR.OptionsFrame.RangeCheck and GVAR.OptionsFrame.RangeCheck.Highlight then GVAR.OptionsFrame.RangeCheck.Highlight:Hide(); end
-		if GVAR.OptionsFrame.RangeCheckTypePullDown then GVAR.OptionsFrame.RangeCheckTypePullDown:UnlockHighlight(); end
-		if GVAR.OptionsFrame.RangeDisplayPullDown then GVAR.OptionsFrame.RangeDisplayPullDown:UnlockHighlight(); end
 		if GVAR.OptionsFrame.SortByPullDown then GVAR.OptionsFrame.SortByPullDown:UnlockHighlight(); end
 		if GVAR.OptionsFrame.SortDetailPullDown then GVAR.OptionsFrame.SortDetailPullDown:UnlockHighlight(); end
 		if GVAR.OptionsFrame.FontSlider and GVAR.OptionsFrame.FontSlider.Background then GVAR.OptionsFrame.FontSlider.Background:SetTexture(0, 0, 0, 0); end
@@ -2635,146 +2639,12 @@ function BattlegroundTargets:CreateOptionsFrame()
 		BattlegroundTargets:EnableConfigMode();
 	end);
 	
-	local rangeW = 0;
-	local minRange, maxRange;
-	
-	if(ranges[playerClassEN]) then
-		local _, _, _, _, _, _, _, minR, maxR = GetSpellInfo(ranges[playerClassEN]);
-		
-		minRange = minR;
-		maxRange = maxR;
-	end
-	
-	minRange = minRange or "?";
-	maxRange = maxRange or "?";
-	rangeTypeName[2] = "2) "..CLASS.." |cffffff79("..minRange.."-"..maxRange..")|r";
-	rangeTypeName[3] = "3) "..L["Mix"].." 1 |cffffff79("..minRange.."-"..maxRange..") + (0-45)|r";
-	rangeTypeName[4] = "4) "..L["Mix"].." 2 |cffffff79("..minRange.."-"..maxRange..") + ("..minRange.."-"..maxRange..")|r";
-	
-	local buttonName = rangeTypeName[1];
-	if(OPT.ButtonTypeRangeCheck[currentSize] == 2) then
-		buttonName = rangeTypeName[2];
-	elseif(OPT.ButtonTypeRangeCheck[currentSize] == 3) then
-		buttonName = rangeTypeName[3];
-	elseif(OPT.ButtonTypeRangeCheck[currentSize] == 4) then
-		buttonName = rangeTypeName[4];
-	end
-	
-	local rangeInfoTxt = ""
-	rangeInfoTxt = rangeInfoTxt..rangeTypeName[1]..":\n";
-	rangeInfoTxt = rangeInfoTxt.."   |cffffffff"..L["This option uses the CombatLog to check range."].."|r\n\n\n";
-	rangeInfoTxt = rangeInfoTxt..rangeTypeName[2]..":\n"
-	rangeInfoTxt = rangeInfoTxt.."   |cffffffff"..L["This option uses a pre-defined spell to check range:"].."|r\n";
-	
-	table.sort(class_IntegerSort, function(a, b) if(a.loc < b.loc) then return true; end end);
-	
-	local playerMClass = "?";
-	for i = 1, #class_IntegerSort do
-		local classEN = class_IntegerSort[i].cid;
-		local name, _, _, _, _, _, _, minRange, maxRange = GetSpellInfo(ranges[classEN])
-		local classStr = "|cff"..ClassHexColor(classEN)..class_IntegerSort[i].loc.."|r   "..(minRange or "?").."-"..(maxRange or "?").."   |cffffffff"..(name or UNKNOWN).."|r   |cffbbbbbb(spell ID = "..ranges[classEN]..")|r";
-		
-		if classEN == playerClassEN then
-			playerMClass = "|cff"..ClassHexColor(classEN)..class_IntegerSort[i].loc.."|r";
-			rangeInfoTxt = rangeInfoTxt..">>> "..classStr.." <<<";
-		else
-			rangeInfoTxt = rangeInfoTxt.."     "..classStr;
-		end
-		
-		rangeInfoTxt = rangeInfoTxt.."\n";
-	end
-	
-	rangeInfoTxt = rangeInfoTxt.."\n\n"..rangeTypeName[3]..":\n";
-	rangeInfoTxt = rangeInfoTxt.."   |cffffffff"..CLASS..":|r |cffffff79("..minRange.."-"..maxRange..")|r "..playerMClass.."\n";
-	rangeInfoTxt = rangeInfoTxt.."   |cffffffffCombatLog:|r |cffffff79(0-45)|r\n";
-	rangeInfoTxt = rangeInfoTxt.."   |cffaaaaaa(CombatLog: "..L["if you are attacked only"]..")|r\n";
-	rangeInfoTxt = rangeInfoTxt.."\n\n"..rangeTypeName[4]..":\n";
-	rangeInfoTxt = rangeInfoTxt.."   |cffffffff"..CLASS..":|r |cffffff79("..minRange.."-"..maxRange..")|r "..playerMClass.."\n";
-	rangeInfoTxt = rangeInfoTxt.."   |cffffffffCombatLog|r |cffaaaaaa"..L["(class dependent)"]..":|r |cffffff79("..minRange.."-"..maxRange..")|r "..playerMClass.."\n";
-	rangeInfoTxt = rangeInfoTxt.."   |cffaaaaaa(CombatLog: "..L["if you are attacked only"]..")|r\n";
-	rangeInfoTxt = rangeInfoTxt.."\n\n\n";
-	rangeInfoTxt = rangeInfoTxt.."|TInterface\\DialogFrame\\UI-Dialog-Icon-AlertNew:24|t";
-	rangeInfoTxt = rangeInfoTxt.."|cffffffff "..L["Disable this option if you have CPU/FPS problems in combat."].." |r";
-	rangeInfoTxt = rangeInfoTxt.."|TInterface\\DialogFrame\\UI-Dialog-Icon-AlertNew:24|t";
-	
-	GVAR.OptionsFrame.RangeCheck = CreateFrame("CheckButton", nil, GVAR.OptionsFrame.ConfigBrackets);
-	TEMPLATE.CheckButton(GVAR.OptionsFrame.RangeCheck, 16, 4, L["Show Range"]);
-	GVAR.OptionsFrame.RangeCheck:SetPoint("LEFT", GVAR.OptionsFrame, "LEFT", 10, 0);
-	GVAR.OptionsFrame.RangeCheck:SetPoint("TOP", GVAR.OptionsFrame.ShowHealthBar, "BOTTOM", 0, -10);
-	GVAR.OptionsFrame.RangeCheck:SetChecked(OPT.ButtonRangeCheck[currentSize]);
-	GVAR.OptionsFrame.RangeCheck:SetScript("OnClick", function()
-		BattlegroundTargets_Options.ButtonRangeCheck[currentSize] = not BattlegroundTargets_Options.ButtonRangeCheck[currentSize];
-		OPT.ButtonRangeCheck[currentSize] = not OPT.ButtonRangeCheck[currentSize];
-		GVAR.OptionsFrame.RangeCheck:SetChecked(OPT.ButtonRangeCheck[currentSize]);
-		
-		if(OPT.ButtonRangeCheck[currentSize]) then
-			TEMPLATE.EnablePullDownMenu(GVAR.OptionsFrame.RangeCheckTypePullDown);
-			GVAR.OptionsFrame.RangeCheckInfo:Enable() Desaturation(GVAR.OptionsFrame.RangeCheckInfo.Texture, false);
-			TEMPLATE.EnablePullDownMenu(GVAR.OptionsFrame.RangeDisplayPullDown);
-		else
-			TEMPLATE.DisablePullDownMenu(GVAR.OptionsFrame.RangeCheckTypePullDown);
-			GVAR.OptionsFrame.RangeCheckInfo:Disable() Desaturation(GVAR.OptionsFrame.RangeCheckInfo.Texture, true);
-			TEMPLATE.DisablePullDownMenu(GVAR.OptionsFrame.RangeDisplayPullDown);
-		end
-		
-		BattlegroundTargets:EnableConfigMode();
-	end);
-	
-	rangeW = rangeW + 10 + GVAR.OptionsFrame.RangeCheck:GetWidth();
-	
-	GVAR.OptionsFrame.RangeCheckInfo = CreateFrame("Button", nil, GVAR.OptionsFrame.ConfigBrackets);
-	GVAR.OptionsFrame.RangeCheckInfo:SetWidth(16);
-	GVAR.OptionsFrame.RangeCheckInfo:SetHeight(16);
-	GVAR.OptionsFrame.RangeCheckInfo:SetPoint("LEFT", GVAR.OptionsFrame.RangeCheck, "RIGHT", 10, 0);
-	GVAR.OptionsFrame.RangeCheckInfo.Texture = GVAR.OptionsFrame.RangeCheckInfo:CreateTexture(nil, "ARTWORK");
-	GVAR.OptionsFrame.RangeCheckInfo.Texture:SetWidth(16);
-	GVAR.OptionsFrame.RangeCheckInfo.Texture:SetHeight(16);
-	GVAR.OptionsFrame.RangeCheckInfo.Texture:SetPoint("LEFT", 0, 0)
-	GVAR.OptionsFrame.RangeCheckInfo.Texture:SetTexture("Interface\\FriendsFrame\\InformationIcon");
-	GVAR.OptionsFrame.RangeCheckInfo.TextFrame = CreateFrame("Frame", nil, GVAR.OptionsFrame.ConfigBrackets);
-	TEMPLATE.BorderTRBL(GVAR.OptionsFrame.RangeCheckInfo.TextFrame);
-	GVAR.OptionsFrame.RangeCheckInfo.TextFrame:SetToplevel(true);
-	GVAR.OptionsFrame.RangeCheckInfo.TextFrame:SetPoint("BOTTOM", GVAR.OptionsFrame.RangeCheckInfo.Texture, "TOP", 0, 0);
-	GVAR.OptionsFrame.RangeCheckInfo.TextFrame:Hide();
-	GVAR.OptionsFrame.RangeCheckInfo.Text = GVAR.OptionsFrame.RangeCheckInfo.TextFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall");
-	GVAR.OptionsFrame.RangeCheckInfo.Text:SetPoint("CENTER", 0, 0);
-	GVAR.OptionsFrame.RangeCheckInfo.Text:SetJustifyH("LEFT");
-	GVAR.OptionsFrame.RangeCheckInfo.Text:SetText(rangeInfoTxt);
-	GVAR.OptionsFrame.RangeCheckInfo.Text:SetTextColor(1, 1, 0.49, 1);
-	GVAR.OptionsFrame.RangeCheckInfo:SetScript("OnEnter", function() GVAR.OptionsFrame.RangeCheckInfo.TextFrame:Show(); end);
-	GVAR.OptionsFrame.RangeCheckInfo:SetScript("OnLeave", function() GVAR.OptionsFrame.RangeCheckInfo.TextFrame:Hide(); end);
-	
-	rangeW = rangeW + 10 + 16;
-	
-	local txtWidth = GVAR.OptionsFrame.RangeCheckInfo.Text:GetStringWidth();
-	local txtHeight = GVAR.OptionsFrame.RangeCheckInfo.Text:GetStringHeight();
-	GVAR.OptionsFrame.RangeCheckInfo.TextFrame:SetWidth(txtWidth + 30);
-	GVAR.OptionsFrame.RangeCheckInfo.TextFrame:SetHeight(txtHeight + 30);
-	GVAR.OptionsFrame.RangeCheckInfo.Text:SetWidth(txtWidth + 10);
-	GVAR.OptionsFrame.RangeCheckInfo.Text:SetHeight(txtHeight + 10);
-	
-	GVAR.OptionsFrame.RangeCheckTypePullDown = CreateFrame("Button", nil, GVAR.OptionsFrame.ConfigBrackets);
-	TEMPLATE.PullDownMenu(GVAR.OptionsFrame.RangeCheckTypePullDown, "RangeType", buttonName, 0, 4, RangeCheckTypePullDownFunc);
-	GVAR.OptionsFrame.RangeCheckTypePullDown:SetPoint("LEFT", GVAR.OptionsFrame.RangeCheckInfo, "RIGHT", 10, 0);
-	GVAR.OptionsFrame.RangeCheckTypePullDown:SetHeight(18);
-	TEMPLATE.EnablePullDownMenu(GVAR.OptionsFrame.RangeCheckTypePullDown);
-	
-	rangeW = rangeW + 10 + GVAR.OptionsFrame.RangeCheckTypePullDown:GetWidth();
-	
-	GVAR.OptionsFrame.RangeDisplayPullDown = CreateFrame("Button", nil, GVAR.OptionsFrame.ConfigBrackets)
-	TEMPLATE.PullDownMenu(GVAR.OptionsFrame.RangeDisplayPullDown, "RangeDisplay", rangeDisplay[ BattlegroundTargets_Options.ButtonRangeDisplay[currentSize] ], 0, #rangeDisplay, RangeDisplayPullDownFunc)
-	GVAR.OptionsFrame.RangeDisplayPullDown:SetPoint("LEFT", GVAR.OptionsFrame.RangeCheckTypePullDown, "RIGHT", 10, 0);
-	GVAR.OptionsFrame.RangeDisplayPullDown:SetHeight(18);
-	TEMPLATE.EnablePullDownMenu(GVAR.OptionsFrame.RangeDisplayPullDown);
-	
-	rangeW = rangeW + 10 + GVAR.OptionsFrame.RangeDisplayPullDown:GetWidth() + 10;
-	
 	local sortW = 0;
 	
 	GVAR.OptionsFrame.SortByTitle = GVAR.OptionsFrame.ConfigBrackets:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall");
 	GVAR.OptionsFrame.SortByTitle:SetHeight(16);
 	GVAR.OptionsFrame.SortByTitle:SetPoint("LEFT", GVAR.OptionsFrame, "LEFT", 10, 0);
-	GVAR.OptionsFrame.SortByTitle:SetPoint("TOP", GVAR.OptionsFrame.RangeCheck, "BOTTOM", 0, -10);
+	GVAR.OptionsFrame.SortByTitle:SetPoint("TOP", GVAR.OptionsFrame.ShowHealthBar, "BOTTOM", 0, -10);
 	GVAR.OptionsFrame.SortByTitle:SetJustifyH("LEFT");
 	GVAR.OptionsFrame.SortByTitle:SetText(L["Sort By"]..":");
 	GVAR.OptionsFrame.SortByTitle:SetTextColor(1, 1, 1, 1);
@@ -3194,10 +3064,6 @@ function BattlegroundTargets:SetOptions()
 	GVAR.OptionsFrame.ShowHealthBar:SetChecked(OPT.ButtonShowHealthBar[currentSize]);
 	GVAR.OptionsFrame.ShowHealthText:SetChecked(OPT.ButtonShowHealthText[currentSize]);
 	
-	GVAR.OptionsFrame.RangeCheck:SetChecked(OPT.ButtonRangeCheck[currentSize]);
-	GVAR.OptionsFrame.RangeCheckTypePullDown.PullDownButtonText:SetText(rangeTypeName[ OPT.ButtonTypeRangeCheck[currentSize] ]);
-	GVAR.OptionsFrame.RangeDisplayPullDown.PullDownButtonText:SetText(rangeDisplay[ OPT.ButtonRangeDisplay[currentSize] ]);
-
 	GVAR.OptionsFrame.SortByPullDown.PullDownButtonText:SetText(sortBy[ OPT.ButtonSortBy[currentSize] ]);
 	GVAR.OptionsFrame.SortDetailPullDown.PullDownButtonText:SetText(sortDetail[ OPT.ButtonSortDetail[currentSize] ]);
 
@@ -3246,18 +3112,6 @@ function BattlegroundTargets:CheckForEnabledBracket(bracketSize)
 		
 		TEMPLATE.EnableCheckButton(GVAR.OptionsFrame.ShowHealthBar);
 		TEMPLATE.EnableCheckButton(GVAR.OptionsFrame.ShowHealthText);
-		
-		TEMPLATE.EnableCheckButton(GVAR.OptionsFrame.RangeCheck);
-		
-		if(OPT.ButtonRangeCheck[bracketSize]) then
-			TEMPLATE.EnablePullDownMenu(GVAR.OptionsFrame.RangeCheckTypePullDown);
-			GVAR.OptionsFrame.RangeCheckInfo:Enable() Desaturation(GVAR.OptionsFrame.RangeCheckInfo.Texture, false);
-			TEMPLATE.EnablePullDownMenu(GVAR.OptionsFrame.RangeDisplayPullDown);
-		else
-			TEMPLATE.DisablePullDownMenu(GVAR.OptionsFrame.RangeCheckTypePullDown);
-			GVAR.OptionsFrame.RangeCheckInfo:Disable() Desaturation(GVAR.OptionsFrame.RangeCheckInfo.Texture, true);
-			TEMPLATE.DisablePullDownMenu(GVAR.OptionsFrame.RangeDisplayPullDown);
-		end
 
 		TEMPLATE.EnablePullDownMenu(GVAR.OptionsFrame.SortByPullDown);
 		GVAR.OptionsFrame.SortByTitle:SetTextColor(1, 1, 1, 1);
@@ -3296,11 +3150,6 @@ function BattlegroundTargets:CheckForEnabledBracket(bracketSize)
 		TEMPLATE.DisableCheckButton(GVAR.OptionsFrame.ShowHealthBar);
 		TEMPLATE.DisableCheckButton(GVAR.OptionsFrame.ShowHealthText);
 		
-		TEMPLATE.DisableCheckButton(GVAR.OptionsFrame.RangeCheck);
-		TEMPLATE.DisablePullDownMenu(GVAR.OptionsFrame.RangeCheckTypePullDown);
-		GVAR.OptionsFrame.RangeCheckInfo:Disable() Desaturation(GVAR.OptionsFrame.RangeCheckInfo.Texture, true);
-		TEMPLATE.DisablePullDownMenu(GVAR.OptionsFrame.RangeDisplayPullDown);
-		
 		TEMPLATE.DisablePullDownMenu(GVAR.OptionsFrame.SortByPullDown);
 		GVAR.OptionsFrame.SortByTitle:SetTextColor(0.5, 0.5, 0.5, 1);
 		TEMPLATE.DisablePullDownMenu(GVAR.OptionsFrame.SortDetailPullDown);
@@ -3338,11 +3187,6 @@ function BattlegroundTargets:DisableInsecureConfigWidges()
 	
 	TEMPLATE.DisableCheckButton(GVAR.OptionsFrame.ShowHealthBar);
 	TEMPLATE.DisableCheckButton(GVAR.OptionsFrame.ShowHealthText);
-	
-	TEMPLATE.DisableCheckButton(GVAR.OptionsFrame.RangeCheck);
-	TEMPLATE.DisablePullDownMenu(GVAR.OptionsFrame.RangeCheckTypePullDown);
-	GVAR.OptionsFrame.RangeCheckInfo:Disable() Desaturation(GVAR.OptionsFrame.RangeCheckInfo.Texture, true);
-	TEMPLATE.DisablePullDownMenu(GVAR.OptionsFrame.RangeDisplayPullDown);
 	
 	TEMPLATE.DisablePullDownMenu(GVAR.OptionsFrame.SortByPullDown);
 	GVAR.OptionsFrame.SortByTitle:SetTextColor(0.5, 0.5, 0.5, 1);
@@ -3561,11 +3405,7 @@ function BattlegroundTargets:SetupButtonLayout()
 	local iconNum = 0; 
 	if ButtonShowHealer then iconNum = 1 end
 	
-	if(ButtonRangeCheck and ButtonRangeDisplay < 9) then
-		withIconWidth = (ButtonWidth - ( (ButtonHeight_2 * iconNum) + (ButtonHeight_2 / 2) ) ) - 2;
-	else
-		withIconWidth = (ButtonWidth - (ButtonHeight_2 * iconNum)) - 2;
-	end
+	withIconWidth = (ButtonWidth - (ButtonHeight_2 * iconNum)) - 2;
 
 	local isWSG = (currentSize == 10);
 	local useFosterWSG = isWSG and (BattlegroundTargets_Options.UseFosterThemeWSG ~= false);
@@ -3611,19 +3451,17 @@ function BattlegroundTargets:SetupButtonLayout()
 		GVAR_TargetButton.Background:SetWidth(ButtonWidth_2);
 		GVAR_TargetButton.Background:SetHeight(ButtonHeight_2);
 		
-		if(ButtonRangeCheck and ButtonRangeDisplay < 9) then
-			GVAR_TargetButton.RangeTexture:Show();
-			GVAR_TargetButton.RangeTexture:SetWidth(ButtonHeight_2/2);
-			GVAR_TargetButton.RangeTexture:SetHeight(ButtonHeight_2);
-		else
-			GVAR_TargetButton.RangeTexture:Hide();
-		end
-		
+		GVAR_TargetButton.RangeTexture:Hide();
+		GVAR_TargetButton.RangeTexture:SetAlpha(0);
 		GVAR_TargetButton.ClassTexture:Hide();
+		GVAR_TargetButton.ClassTexture:SetAlpha(0);
 		if GVAR_TargetButton.ClassBorder then GVAR_TargetButton.ClassBorder:Hide(); end
 		if GVAR_TargetButton.ClassCooldown then GVAR_TargetButton.ClassCooldown:Hide(); end
 		GVAR_TargetButton.LeaderTexture:Hide();
+		GVAR_TargetButton.LeaderTexture:SetAlpha(0);
 		GVAR_TargetButton.TargetCountBackground:Hide();
+		GVAR_TargetButton.TargetCountBackground:SetAlpha(0);
+		GVAR_TargetButton.TargetCount:SetText("");
 		GVAR_TargetButton.TargetCount:Hide();
 
 		GVAR_TargetButton.ClassColorBackground:SetHeight(ButtonHeight_2);
@@ -3635,27 +3473,15 @@ function BattlegroundTargets:SetupButtonLayout()
 			GVAR_TargetButton.HealersTexture:SetWidth(ButtonHeight_2);
 			GVAR_TargetButton.HealersTexture:SetHeight(ButtonHeight_2);
 			if OPT.ButtonRoleLayoutPos[currentSize] == 2 then
-				if(ButtonRangeCheck and ButtonRangeDisplay < 9) then
-					GVAR_TargetButton.HealersTexture:SetPoint("LEFT", GVAR_TargetButton.RangeTexture, "RIGHT", 0, 0);
-				else
-					GVAR_TargetButton.HealersTexture:SetPoint("LEFT", GVAR_TargetButton, "LEFT", 1, 0);
-				end
+				GVAR_TargetButton.HealersTexture:SetPoint("LEFT", GVAR_TargetButton, "LEFT", 1, 0);
 				GVAR_TargetButton.ClassColorBackground:SetPoint("LEFT", GVAR_TargetButton.HealersTexture, "RIGHT", 0, 0);
 			else
-				if(ButtonRangeCheck and ButtonRangeDisplay < 9) then
-					GVAR_TargetButton.ClassColorBackground:SetPoint("LEFT", GVAR_TargetButton.RangeTexture, "RIGHT", 0, 0);
-				else
-					GVAR_TargetButton.ClassColorBackground:SetPoint("LEFT", GVAR_TargetButton, "LEFT", 1, 0);
-				end
+				GVAR_TargetButton.ClassColorBackground:SetPoint("LEFT", GVAR_TargetButton, "LEFT", 1, 0);
 				GVAR_TargetButton.HealersTexture:SetPoint("RIGHT", GVAR_TargetButton, "RIGHT", -2, 0);
 			end
 		else
 			GVAR_TargetButton.HealersTexture:Hide();
-			if(ButtonRangeCheck and ButtonRangeDisplay < 9) then
-				GVAR_TargetButton.ClassColorBackground:SetPoint("LEFT", GVAR_TargetButton.RangeTexture, "RIGHT", 0, 0);
-			else
-				GVAR_TargetButton.ClassColorBackground:SetPoint("LEFT", GVAR_TargetButton, "LEFT", 1, 0);
-			end
+			GVAR_TargetButton.ClassColorBackground:SetPoint("LEFT", GVAR_TargetButton, "LEFT", 1, 0);
 		end
 		
 		GVAR_TargetButton.Name:SetFont(fontPath, ButtonFontSize, "");
@@ -4013,7 +3839,12 @@ function BattlegroundTargets:SetConfigButtonValues()
 		GVAR_TargetButton.HighlightR:SetTexture(0, 0, 0, 1);
 		GVAR_TargetButton.HighlightB:SetTexture(0, 0, 0, 1);
 		GVAR_TargetButton.HighlightL:SetTexture(0, 0, 0, 1);
-		GVAR_TargetButton.TargetCount:SetText("0");
+		GVAR_TargetButton.TargetCount:SetText("");
+		GVAR_TargetButton.TargetCount:Hide();
+		GVAR_TargetButton.TargetCountBackground:Hide();
+		GVAR_TargetButton.TargetCountBackground:SetAlpha(0);
+		GVAR_TargetButton.RangeTexture:Hide();
+		GVAR_TargetButton.RangeTexture:SetAlpha(0);
 		GVAR_TargetButton.FocusTexture:SetAlpha(0);
 		GVAR_TargetButton.AssistTexture:SetAlpha(0);
 		GVAR_TargetButton.LeaderTexture:SetAlpha(0);
@@ -4036,16 +3867,7 @@ function BattlegroundTargets:SetConfigButtonValues()
 		end
 		
 		local healerState = ButtonShowHealers and true;
-
-		if(ButtonRangeCheck) then
-			if(testRange[i] < 40) then
-				Range_Display(true, GVAR_TargetButton, ButtonRangeDisplay, healerState);
-			else
-				Range_Display(false, GVAR_TargetButton, ButtonRangeDisplay, healerState);
-			end
-		else
-			Range_Display(true, GVAR_TargetButton, ButtonRangeDisplay, healerState);
-		end
+		Range_Display(true, GVAR_TargetButton, 1, healerState);
 		
 		if(OPT.ButtonShowHealer[currentSize]) then
 			local status = battleFieldRoleIcons[1];
@@ -4099,6 +3921,11 @@ function BattlegroundTargets:ClearConfigButtonValues(GVAR_TargetButton, clearRan
 	GVAR_TargetButton.HighlightB:SetTexture(0, 0, 0, 0.6);
 	GVAR_TargetButton.HighlightL:SetTexture(0, 0, 0, 0.6);
 	GVAR_TargetButton.TargetCount:SetText("");
+	GVAR_TargetButton.TargetCount:Hide();
+	GVAR_TargetButton.TargetCountBackground:Hide();
+	GVAR_TargetButton.TargetCountBackground:SetAlpha(0);
+	GVAR_TargetButton.RangeTexture:Hide();
+	GVAR_TargetButton.RangeTexture:SetAlpha(0);
 	GVAR_TargetButton.FocusTexture:SetAlpha(0);
 	GVAR_TargetButton.AssistTexture:SetAlpha(0);
 	GVAR_TargetButton.LeaderTexture:SetAlpha(0);
@@ -4580,14 +4407,6 @@ function BattlegroundTargets:MainDataUpdate()
 	end
 	
 	if(isConfig) then
-		if(isLowLevel) then
-			for i = 1, currentSize do
-				local GVAR_TargetButton = GVAR.TargetButton[i];
-				
-				GVAR_TargetButton.Name:SetText(playerLevel.." "..GVAR_TargetButton.name4button);
-			end
-		end
-		
 		return;
 	end
 	
@@ -5840,6 +5659,7 @@ function BattlegroundTargets:ClearRangeData()
 end
 
 function BattlegroundTargets:CheckPlayerLevel()
+	playerLevel = UnitLevel("player") or 60;
 	if(playerLevel == maxLevel) then
 		isLowLevel = nil;
 		BattlegroundTargets:UnregisterEvent("PLAYER_LEVEL_UP");
