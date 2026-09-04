@@ -151,46 +151,6 @@ local OPT      = {};
 
 local AddonIcon = "Interface\\AddOns\\BattlegroundTargets\\Textures\\BattlegroundTargets-texture-button";
 
-local _G = _G;
-local GetTime = _G.GetTime;
-local InCombatLockdown = _G.InCombatLockdown;
-local IsInInstance = _G.IsInInstance;
-local IsRatedBattleground = _G.IsRatedBattleground;
-
-local GetBattlefieldArenaFaction = _G.GetBattlefieldArenaFaction;
-local GetRealZoneText            = _G.GetRealZoneText;
-local GetMaxBattlefieldID        = _G.GetMaxBattlefieldID;
-local GetBattlefieldStatus       = _G.GetBattlefieldStatus;
-local GetNumBattlefieldScores    = _G.GetNumBattlefieldScores;
-local GetBattlefieldScore        = _G.GetBattlefieldScore;
-local SetBattlefieldScoreFaction = _G.SetBattlefieldScoreFaction;
-local UnitName                   = _G.UnitName;
-local UnitClass         		 = _G.UnitClass;
-local UnitLevel                  = _G.UnitLevel;
-local UnitHealthMax              = _G.UnitHealthMax;
-local UnitHealth                 = _G.UnitHealth;
-local UnitIsPartyLeader          = _G.UnitIsPartyLeader;
-local UnitIsEnemy                = _G.UnitIsEnemy;
-local UnitBuff                   = _G.UnitBuff;
-local UnitDebuff                 = _G.UnitDebuff;
-local GetSpellInfo               = _G.GetSpellInfo;
-local IsSpellInRange             = _G.IsSpellInRange;
-local CheckInteractDistance      = _G.CheckInteractDistance;
-local GetNumRaidMembers          = _G.GetNumRaidMembers;
-local GetRaidRosterInfo          = _G.GetRaidRosterInfo;
-local math_min                   = _G.math.min;
-local math_max                   = _G.math.max;
-local math_floor                 = _G.math.floor;
-local math_random                = _G.math.random;
-local string_find                = _G.string.find;
-local string_match               = _G.string.match;
-local string_format              = _G.string.format;
-local table_sort                 = _G.table.sort;
-local table_wipe                 = _G.table.wipe;
-local pairs                      = _G.pairs;
-local tonumber                   = _G.tonumber;
-local next 						 = _G.next;
-local GetPlayerMapPosition		 = _G.GetPlayerMapPosition;
 
 local inWorld;
 local inBattleground;
@@ -215,7 +175,7 @@ local scoreUpdateFrequency = 1;              -- scoreupdate: 0-20 updates = 1 se
 local scoreUpdateCount = 0;              	 -- scoreupdate: (reason: later score updates are less relevant and 5 seconds is still very high)
 local range_SPELL_Frequency = 0.2;       	 -- rangecheck: [class-spell]: the 0.2 second freq is per enemy (variable: ENEMY_Name2Range[enemyname]) 
 local range_CL_Throttle = 0;         		 -- rangecheck: [combatlog] C.ombatLogRangeCheck()
-local range_CL_Frequency = 3;         		 -- rangecheck: [combatlog] 50/50 or 66/33 or 75/25 (%Yes/%No) => 64/36 = 36% combatlog messages filtered (36% vs overhead: two variables, one addition, one number comparison and if filtered one math_random)
+local range_CL_Frequency = 3;         		 -- rangecheck: [combatlog] 50/50 or 66/33 or 75/25 (%Yes/%No) => 64/36 = 36% combatlog messages filtered (36% vs overhead: two variables, one addition, one number comparison and if filtered one math.random)
 local range_CL_DisplayThrottle = GetTime();  -- rangecheck: [combatlog] display update
 local range_CL_DisplayFrequency = 0.33;      -- rangecheck: [combatlog] display update
 local leaderThrottle = 0;                    -- leader: C.heckUnitTarget()
@@ -538,7 +498,7 @@ end
 local function ClassHexColor(class)
 	local hex;
 	if(classcolors[class]) then
-		hex = string_format("%.2x%.2x%.2x", classcolors[class].r*255, classcolors[class].g*255, classcolors[class].b*255);
+		hex = string.format("%.2x%.2x%.2x", classcolors[class].r*255, classcolors[class].g*255, classcolors[class].b*255);
 	end
 	return hex or "cccccc";
 end
@@ -698,7 +658,7 @@ ffSmoothTicker:SetScript('OnUpdate', function()
 			bar:SetValue_(target)
 			ffSmoothing[bar] = nil
 		else
-			local rate = math_min(1.0, dt * 15.0)
+			local rate = math.min(1.0, dt * 15.0)
 			local new = cur + (diff * rate)
 			bar:SetValue_(new)
 		end
@@ -2560,7 +2520,7 @@ function BattlegroundTargets:CreateOptionsFrame()
 		GVAR.OptionsFrame.LayoutSpace:GetWidth() + 50;
 	
 	GVAR.OptionsFrame.CopySettings = CreateFrame("Button", nil, GVAR.OptionsFrame.ConfigBrackets);
-	TEMPLATE.TextButton(GVAR.OptionsFrame.CopySettings, string_format(L["Copy this settings to '%s'"], L["15 vs 15"]), 4);
+	TEMPLATE.TextButton(GVAR.OptionsFrame.CopySettings, string.format(L["Copy this settings to '%s'"], L["15 vs 15"]), 4);
 	GVAR.OptionsFrame.CopySettings:SetPoint("TOP", GVAR.OptionsFrame.Dummy1, "BOTTOM", 0, -62); -- 10+16+10+16+10
 	GVAR.OptionsFrame.CopySettings:SetWidth(GVAR.OptionsFrame.CopySettings:GetTextWidth() + 40);
 	GVAR.OptionsFrame.CopySettings:SetHeight(24);
@@ -2923,7 +2883,7 @@ function BattlegroundTargets:CreateOptionsFrame()
 	rangeInfoTxt = rangeInfoTxt..rangeTypeName[2]..":\n"
 	rangeInfoTxt = rangeInfoTxt.."   |cffffffff"..L["This option uses a pre-defined spell to check range:"].."|r\n";
 	
-	table_sort(class_IntegerSort, function(a, b) if(a.loc < b.loc) then return true; end end);
+	table.sort(class_IntegerSort, function(a, b) if(a.loc < b.loc) then return true; end end);
 	
 	local playerMClass = "?";
 	for i = 1, #class_IntegerSort do
@@ -3055,7 +3015,7 @@ function BattlegroundTargets:CreateOptionsFrame()
 	sortW = sortW + 10 + GVAR.OptionsFrame.SortDetailPullDown:GetWidth();
 	
 	local infoTxt1 = sortDetail[1]..":\n";
-	table_sort(class_IntegerSort, function(a, b) if(a.loc < b.loc) then return true; end end);
+	table.sort(class_IntegerSort, function(a, b) if(a.loc < b.loc) then return true; end end);
 	for i = 1, #class_IntegerSort do
 		infoTxt1 = infoTxt1.." |cff"..ClassHexColor(class_IntegerSort[i].cid)..class_IntegerSort[i].loc.."|r";
 		if(i <= #class_IntegerSort) then
@@ -3064,7 +3024,7 @@ function BattlegroundTargets:CreateOptionsFrame()
 	end
 	
 	local infoTxt2 = sortDetail[2]..":\n";
-	table_sort(class_IntegerSort, function(a, b) if(a.eng < b.eng) then return true; end end);
+	table.sort(class_IntegerSort, function(a, b) if(a.eng < b.eng) then return true; end end);
 	for i = 1, #class_IntegerSort do
 		infoTxt2 = infoTxt2.." |cff"..ClassHexColor(class_IntegerSort[i].cid)..class_IntegerSort[i].eng.." ("..class_IntegerSort[i].loc..")|r";
 		if(i <= #class_IntegerSort) then
@@ -3073,7 +3033,7 @@ function BattlegroundTargets:CreateOptionsFrame()
 	end
 	
 	local infoTxt3 = sortDetail[3]..":\n";
-	table_sort(class_IntegerSort, function(a, b) if(a.blizz < b.blizz) then return true; end end);
+	table.sort(class_IntegerSort, function(a, b) if(a.blizz < b.blizz) then return true; end end);
 	for i = 1, #class_IntegerSort do
 		infoTxt3 = infoTxt3.." |cff"..ClassHexColor(class_IntegerSort[i].cid)..class_IntegerSort[i].loc.."|r";
 		if(i <= #class_IntegerSort) then
@@ -3408,7 +3368,7 @@ function BattlegroundTargets:CreateOptionsFrame()
 	
 	local spacer = 10;
 	local tabWidth1 = 36;
-	local tabWidth2 = math_floor((frameWidth - tabWidth1 - tabWidth1 - (6 * spacer)) / 3 );
+	local tabWidth2 = math.floor((frameWidth - tabWidth1 - tabWidth1 - (6 * spacer)) / 3 );
 	
 	GVAR.OptionsFrame.TabGeneral:SetWidth(tabWidth1);
 	GVAR.OptionsFrame.TabRaidSize10:SetWidth(tabWidth2);
@@ -3435,9 +3395,9 @@ function BattlegroundTargets:SetOptions()
 	GVAR.OptionsFrame.IndependentPos:SetChecked(BattlegroundTargets_Options.IndependentPositioning[currentSize]);
 
 	if(currentSize == 10) then
-		GVAR.OptionsFrame.CopySettings:SetText(string_format(L["Copy this settings to '%s'"], L["15 vs 15"]));
+		GVAR.OptionsFrame.CopySettings:SetText(string.format(L["Copy this settings to '%s'"], L["15 vs 15"]));
 	elseif(currentSize == 15) then
-		GVAR.OptionsFrame.CopySettings:SetText(string_format(L["Copy this settings to '%s'"], L["10 vs 10"]));
+		GVAR.OptionsFrame.CopySettings:SetText(string.format(L["Copy this settings to '%s'"], L["10 vs 10"]));
 	end
 
 	local LayoutTH = BattlegroundTargets_Options.LayoutTH[currentSize];
@@ -4398,7 +4358,7 @@ function BattlegroundTargets:EnableConfigMode()
 	end
 	
 	if(not testDataLoaded) then
-		table_wipe(ENEMY_Data);
+		table.wipe(ENEMY_Data);
 
 		ENEMY_Data[1]  = { name = "TargetAa-Realm1", classToken = "DRUID" }
 		ENEMY_Data[2]  = { name = "TargetBb-Realm2", classToken = "PRIEST" }
@@ -4581,8 +4541,8 @@ function BattlegroundTargets:SetConfigButtonValues()
 		if(ButtonShowHealthBar) then
 			local width = healthBarWidth * (testHealth[i] / 100);
 			
-			width = math_max(0.01, width);
-			width = math_min(healthBarWidth, width);
+			width = math.max(0.01, width);
+			width = math.min(healthBarWidth, width);
 			GVAR_TargetButton.HealthBar:SetWidth(width);
 		else
 			GVAR_TargetButton.HealthBar:SetWidth(healthBarWidth);
@@ -4681,15 +4641,15 @@ end
 
 function BattlegroundTargets:DefaultShuffle()
 	for i = 1, 40 do
-		testHealth[i] = math_random(0, 100);
-		testRange[i]  = math_random(0, 100);
+		testHealth[i] = math.random(0, 100);
+		testRange[i]  = math.random(0, 100);
 	end
 	
-	testIcon1 = math_random(1, 10);
-	testIcon2 = math_random(1, 10);
-	testIcon3 = math_random(1, 10);
-	testIcon4 = math_random(1, 10);
-	testLeader = math_random(1, 10);
+	testIcon1 = math.random(1, 10);
+	testIcon2 = math.random(1, 10);
+	testIcon3 = math.random(1, 10);
+	testIcon4 = math.random(1, 10);
+	testLeader = math.random(1, 10);
 end
 
 function BattlegroundTargets:ShufflerFunc(what)
@@ -4950,17 +4910,17 @@ function BattlegroundTargets:MainDataUpdate()
 	
 	if ButtonSortBy == 1 then
 		if ButtonSortDetail == 3 then
-			table_sort(ENEMY_Data, sortfunc13); -- Class/Name | 13
+			table.sort(ENEMY_Data, sortfunc13); -- Class/Name | 13
 		elseif ButtonSortDetail == 1 then
-			table_sort(ENEMY_Data, sortfunc11); -- Class/Name | 11
+			table.sort(ENEMY_Data, sortfunc11); -- Class/Name | 11
 		else
-			table_sort(ENEMY_Data, sortfunc12); -- Class/Name | 12
+			table.sort(ENEMY_Data, sortfunc12); -- Class/Name | 12
 		end
 	elseif ButtonSortBy == 2 then
-		table_sort(ENEMY_Data, sortfunc2); -- Name | 2
+		table.sort(ENEMY_Data, sortfunc2); -- Name | 2
 
 	elseif ButtonSortBy == 3 then -- Heals First + Class/Name
-		table_sort(ENEMY_Data, sortfunc33); -- Heals First + Class/Name | 33
+		table.sort(ENEMY_Data, sortfunc33); -- Heals First + Class/Name | 33
 	end
 	
 	local ButtonClassIcon       = OPT.ButtonClassIcon[currentSize];
@@ -4976,7 +4936,7 @@ function BattlegroundTargets:MainDataUpdate()
 	local ButtonShowAssist      = OPT.ButtonShowAssist[currentSize];
 	local ButtonRangeCheck      = OPT.ButtonRangeCheck[currentSize];
 	
-	table_wipe(ENEMY_Name2Button);
+	table.wipe(ENEMY_Name2Button);
 
 	for i = 1, currentSize do
 		if ENEMY_Data[i] then
@@ -5002,8 +4962,8 @@ function BattlegroundTargets:MainDataUpdate()
 			
 			local onlyname = qname;
 			if(ButtonHideRealm) then
-				if(string_find(qname, "-", 1, true)) then
-					onlyname = string_match(qname, "(.-)%-(.*)$");
+				if(string.find(qname, "-", 1, true)) then
+					onlyname = string.match(qname, "(.-)%-(.*)$");
 				end
 			end
 
@@ -5059,8 +5019,8 @@ function BattlegroundTargets:MainDataUpdate()
 					if(ButtonShowHealthBar) then
 						local width = healthBarWidth * (percentE / 100);
 						
-						width = math_max(0.01, width);
-						width = math_min(healthBarWidth, width);
+						width = math.max(0.01, width);
+						width = math.min(healthBarWidth, width);
 						GVAR_TargetButton.HealthBar:SetWidth(width);
 					end
 					
@@ -5464,8 +5424,8 @@ function BattlegroundTargets:BattlefieldScoreUpdate()
 	latestScoreUpdate = curTime;
 	GVAR.ScoreUpdateTexture:Hide();
 
-	table_wipe(ENEMY_Data);
-	table_wipe(FRIEND_Names);
+	table.wipe(ENEMY_Data);
+	table.wipe(FRIEND_Names);
 
 	local x = 1;
 	for index = 1, GetNumBattlefieldScores() do
@@ -5813,16 +5773,16 @@ function BattlegroundTargets:IsNotBattleground()
 	BattlegroundTargets:UnregisterEvent("UPDATE_BATTLEFIELD_SCORE");
 	
 	if(not isConfig) then
-		table_wipe(ENEMY_Data);
+		table.wipe(ENEMY_Data);
 	end
 	
-	table_wipe(ENEMY_Names);
-	table_wipe(ENEMY_Name2Button);
-	table_wipe(ENEMY_Name2Percent);
-	table_wipe(ENEMY_Name2Range);
-	table_wipe(ENEMY_Name2Level);
-	table_wipe(TARGET_Names);
-	table_wipe(ENEMY_Healers);
+	table.wipe(ENEMY_Names);
+	table.wipe(ENEMY_Name2Button);
+	table.wipe(ENEMY_Name2Percent);
+	table.wipe(ENEMY_Name2Range);
+	table.wipe(ENEMY_Name2Level);
+	table.wipe(TARGET_Names);
+	table.wipe(ENEMY_Healers);
 	
 	GVAR.MainFrame:SetScript("OnUpdate", nil);
 	
@@ -5962,7 +5922,7 @@ function BattlegroundTargets:CheckUnitTarget(unitID, unitName)
 	if(OPT.ButtonShowTargetCount[currentSize]) then
 		if(curTime > targetCountForceUpdate + targetCountFrequency) then
 			targetCountForceUpdate = curTime;
-			table_wipe(TARGET_Names);
+			table.wipe(TARGET_Names);
 			
 			for num = 1, GetNumRaidMembers() do
 				local uID = "raid"..num;
@@ -6186,11 +6146,11 @@ function BattlegroundTargets:CheckUnitHealth(unitID, unitName, healthonly)
 				if(maxHealth > 0 and health > 0) then
 					local hvalue = maxHealth / health;
 					width = healthBarWidth / hvalue;
-					width = math_max(0.01, width);
-					width = math_min(healthBarWidth, width);
-					percent = math_floor( (100/hvalue) + 0.5 );
-					percent = math_max(0, percent);
-					percent = math_min(100, percent);
+					width = math.max(0.01, width);
+					width = math.min(healthBarWidth, width);
+					percent = math.floor( (100/hvalue) + 0.5 );
+					percent = math.max(0, percent);
+					percent = math.min(100, percent);
 				end
 				
 				ENEMY_Name2Percent[targetName] = percent;
@@ -6383,7 +6343,7 @@ end
 
 function BattlegroundTargets:ClearRangeData()
 	if(OPT.ButtonRangeCheck[currentSize]) then
-		table_wipe(ENEMY_Name2Range);
+		table.wipe(ENEMY_Name2Range);
 		local ButtonRangeDisplay = OPT.ButtonRangeDisplay[currentSize];
 		for i = 1, currentSize do
 			Range_Display(false, GVAR.TargetButton[i], ButtonRangeDisplay, OPT.ButtonShowHealer[currentSize]);
@@ -6484,7 +6444,7 @@ local function OnEvent(a1, a2, a3, a4, a5, a6, a7, a8, a9)
 		range_CL_Throttle = range_CL_Throttle + 1
 		if range_CL_Throttle > range_CL_Frequency then
 			range_CL_Throttle = 0
-			range_CL_Frequency = math_random(1,3)
+			range_CL_Frequency = math.random(1,3)
 			return
 		end
 		CombatLogRangeCheck(sourceName, destName, spellID)
