@@ -20,7 +20,6 @@ end
 -- # Target                                                                   --
 -- # Main Assist Target                                                       --
 -- # Focus                                                                    --
--- # Enemy Flag Carrier                                                       --
 -- # Target Count                                                             --
 -- # Health                                                                   --
 -- # Range Check                                                              --
@@ -86,15 +85,6 @@ end
 -- # Focus: --------------------------------------------------- LOW CPU USAGE --
 --   - Event:              - PLAYER_FOCUS_CHANGED                             --
 --                                                                            --
--- # Enemy Flag Carrier: --------------------------------- VERY LOW CPU USAGE --
---   - Events:             - CHAT_MSG_BG_SYSTEM_HORDE                         --
---                         - CHAT_MSG_BG_SYSTEM_ALLIANCE                      --
---   Flag detection in case of disconnect, UI reload or mid-battle-joins:     --
---   (temporarily registered until each enemy is scanned)                     --
---                         - UNIT_TARGET                                      --
---                         - UPDATE_MOUSEOVER_UNIT                            --
---                         - PLAYER_TARGET_CHANGED                            --
---                                                                            --
 -- # No SendAdd0nMessage(): ------------------------------------------------- --
 --   This AddOn does not use/need SendAdd0nMessage(). SendAdd0nMessage()      --
 --   increases the available data by transmitting information to other        --
@@ -151,7 +141,6 @@ local MOD_VERSION = "1.14.2-Vanilla";
 
 local L   = BattlegroundTargets_Localization;
 local BGN = BattlegroundTargets_BGNames;
-local FLG = BattlegroundTargets_Flag;
 local RNA = BattlegroundTargets_RaceNames;
 local DBUtils = BattlegroundTargets_DBUtils;
 
@@ -212,16 +201,12 @@ local reSetLayout;
 local isConfig;
 local testDataLoaded;
 local isTarget = 0;
-local hasFlag;
 local isDeadUpdateStop;
 local isLeader;
 local isHealer; 
 local isAssistName;
 local isAssistUnitId;
 local rangeSpellName, rangeMin, rangeMax;
-local isFlagBG = 0;
-local flagCHK;
-local flagflag;
 
 -- THROTTLE (reduce CPU usage) -----------------------------------------------------------------------------------------
 local scoreUpdateThrottle = GetTime();       -- scoreupdate: B.attlefieldScoreUpdate()
@@ -264,12 +249,10 @@ local factionIsValid = false;  -- cross-server faction validate flag
 
 local ENEMY_Data           = {};  -- numerical | all data
 local ENEMY_Names          = {};  -- key/value | key = enemyName, value = count
-local ENEMY_Names4Flag     = {};  -- key/value | key = enemyName without realm, value = button number
 local ENEMY_Name2Button    = {};  -- key/value | key = enemyName, value = button number
 local ENEMY_Name2Percent   = {};  -- key/value | key = enemyName, value = health in percent
 local ENEMY_Name2Range     = {};  -- key/value | key = enemyName, value = time of last contact
 local ENEMY_Name2Level     = {};  -- key/value | key = enemyName, value = level
-local ENEMY_FirstFlagCheck = {};  -- key/value | key = enemyName, value = 1
 local FRIEND_Names         = {};  -- key/value | key = friendName, value = 1
 local TARGET_Names         = {};  -- key/value | key = friendName, value = enemyName
 local SPELL_Range          = {};  -- key/value | key = spellID, value = maxRange
@@ -380,14 +363,6 @@ local roleLayoutPos = {
 }; 
 
 local hdlog = BattlegroundTargets_Options  and  BattlegroundTargets_Options.hdlog or false;
-local flagBG = {
-	["Warsong Gulch"] = 1,
-};
-
-local flagIDs = {
-	[23333] = 1, -- Warsong Flag
-	[23335] = 1, -- Silverwing Flag
-};
 
 local sortBy = {
 	[1] = CLASS.."* / "..NAME,
@@ -790,19 +765,6 @@ function BattlegroundTargets:CreateFrames()
 		GVAR_TargetButton.FocusTexture:SetTexture("Interface\\AddOns\\BattlegroundTargets\\Textures\\Focus");
 		GVAR_TargetButton.FocusTexture:SetAlpha(0);
 		
-		GVAR_TargetButton.FlagTextureButton = CreateFrame("Button", nil, GVAR_TargetButton);
-		GVAR_TargetButton.FlagTextureButton:EnableMouse(false);
-		GVAR_TargetButton.FlagTexture = GVAR_TargetButton.FlagTextureButton:CreateTexture(nil, "OVERLAY");
-		GVAR_TargetButton.FlagTexture:SetWidth(buttonHeight - 2);
-		GVAR_TargetButton.FlagTexture:SetHeight(buttonHeight - 2);
-		GVAR_TargetButton.FlagTexture:SetPoint("LEFT", GVAR_TargetButton, "RIGHT", 0, 0);
-		GVAR_TargetButton.FlagTexture:SetTexCoord(0.15625001, 0.84374999, 0.15625001, 0.84374999);
-		
-		if playerFactionDEF == 0 then GVAR_TargetButton.FlagTexture:SetTexture("Interface\\WorldStateFrame\\HordeFlag");
-		else GVAR_TargetButton.FlagTexture:SetTexture("Interface\\WorldStateFrame\\AllianceFlag"); end
-		
-		GVAR_TargetButton.FlagTexture:SetAlpha(0);
-		
 		GVAR_TargetButton.AssistTextureButton = CreateFrame("Button", nil, GVAR_TargetButton);
 		GVAR_TargetButton.AssistTextureButton:EnableMouse(false);
 		GVAR_TargetButton.AssistTexture = GVAR_TargetButton.AssistTextureButton:CreateTexture(nil, "OVERLAY");
@@ -986,9 +948,6 @@ function BattlegroundTargets:SetupButtonLayout()
 	local ButtonShowFocus       = OPT.ButtonShowFocus[currentSize];
 	local ButtonFocusScale      = OPT.ButtonFocusScale[currentSize];
 	local ButtonFocusPosition   = OPT.ButtonFocusPosition[currentSize];
-	local ButtonShowFlag        = OPT.ButtonShowFlag[currentSize];
-	local ButtonFlagScale       = OPT.ButtonFlagScale[currentSize];
-	local ButtonFlagPosition    = OPT.ButtonFlagPosition[currentSize];
 	local ButtonShowAssist      = OPT.ButtonShowAssist[currentSize];
 	local ButtonAssistScale     = OPT.ButtonAssistScale[currentSize];
 	local ButtonAssistPosition  = OPT.ButtonAssistPosition[currentSize];
@@ -1029,7 +988,6 @@ function BattlegroundTargets:SetupButtonLayout()
 		GVAR_TargetButton.TargetTextureButton:SetFrameLevel(lvl + 3);
 		GVAR_TargetButton.AssistTextureButton:SetFrameLevel(lvl + 4);
 		GVAR_TargetButton.FocusTextureButton:SetFrameLevel(lvl + 5);
-		GVAR_TargetButton.FlagTextureButton:SetFrameLevel(lvl + 6);
 		
 		GVAR_TargetButton:SetScale(ButtonScale);
 		
@@ -1226,24 +1184,6 @@ function BattlegroundTargets:SetupButtonLayout()
 			GVAR_TargetButton.FocusTexture:Hide();
 		end
 		
-		if(ButtonShowFlag) then
-			local quad = ButtonHeight_2 * ButtonFlagScale;
-			local leftPos = -quad;
-			
-			GVAR_TargetButton.FlagTexture:SetWidth(quad);
-			GVAR_TargetButton.FlagTexture:SetHeight(quad);
-			
-			if(ButtonFlagPosition >= 100) then
-				leftPos = ButtonWidth
-			elseif(ButtonFlagPosition > 0) then
-				leftPos = ((quad + ButtonWidth) * (ButtonFlagPosition / 100)) - quad;
-			end
-			
-			GVAR_TargetButton.FlagTexture:SetPoint("LEFT", GVAR_TargetButton, "LEFT", leftPos, 0);
-			GVAR_TargetButton.FlagTexture:Show();
-		else
-			GVAR_TargetButton.FlagTexture:Hide();
-		end
 		
 		if(ButtonShowAssist) then
 			local quad = ButtonHeight_2 * ButtonAssistScale;
@@ -1297,12 +1237,10 @@ function BattlegroundTargets:MainDataUpdate()
 	local ButtonShowHealthText  = OPT.ButtonShowHealthText[currentSize];
 	local ButtonShowTarget      = OPT.ButtonShowTarget[currentSize];
 	local ButtonShowFocus       = OPT.ButtonShowFocus[currentSize];
-	local ButtonShowFlag        = OPT.ButtonShowFlag[currentSize];
 	local ButtonShowAssist      = OPT.ButtonShowAssist[currentSize];
 	local ButtonRangeCheck      = OPT.ButtonRangeCheck[currentSize];
 	
 	table_wipe(ENEMY_Name2Button);
-	table_wipe(ENEMY_Names4Flag);
 
 	for i = 1, currentSize do
 		if ENEMY_Data[i] then
@@ -1327,12 +1265,10 @@ function BattlegroundTargets:MainDataUpdate()
 			GVAR_TargetButton.HealthBar:SetTexture(colR, colG, colB, 1);
 			
 			local onlyname = qname;
-			if(ButtonShowFlag or ButtonHideRealm) then
+			if(ButtonHideRealm) then
 				if(string_find(qname, "-", 1, true)) then
 					onlyname = string_match(qname, "(.-)%-(.*)$");
 				end
-				
-				ENEMY_Names4Flag[onlyname] = i;
 			end
 
 			if(ButtonHideRealm) then
@@ -1419,14 +1355,6 @@ function BattlegroundTargets:MainDataUpdate()
 					GVAR_TargetButton.FocusTexture:SetAlpha(1);
 				else
 					GVAR_TargetButton.FocusTexture:SetAlpha(0);
-				end
-			end
-			
-			if(ButtonShowFlag and hasFlag) then
-				if(qname == hasFlag) then
-					GVAR_TargetButton.FlagTexture:SetAlpha(1);
-				else
-					GVAR_TargetButton.FlagTexture:SetAlpha(0);
 				end
 			end
 			
@@ -1848,12 +1776,6 @@ function BattlegroundTargets:BattlefieldScoreUpdate()
 	
 	if(ENEMY_Data[1]) then
 		BattlegroundTargets:MainDataUpdate();
-		
-		if(not flagflag and isFlagBG > 0) then
-			if(OPT.ButtonShowFlag[currentSize]) then
-				BattlegroundTargets:CheckFlagCarrierSTART();
-			end
-		end
 	end
 	
 	if(reSizeCheck >= 10) then return; end
@@ -1871,88 +1793,6 @@ function BattlegroundTargets:BattlefieldScoreUpdate()
 	end
 end
 
-function BattlegroundTargets:CheckFlagCarrierCHECK(unit, targetName)
-	if(not ENEMY_FirstFlagCheck[targetName]) then return; end
-	for i = 1, 40 do
-		local spellID = select(10, UnitBuff(unit, i));
-		if(not spellID) then break; end
-		if(flagIDs[spellID]) then
-			hasFlag = targetName;
-			for j = 1, currentSize do
-				local GVAR_TargetButton = GVAR.TargetButton[j];
-				
-				GVAR_TargetButton.FlagTexture:SetAlpha(0);
-			end
-			local button = ENEMY_Name2Button[targetName];
-			if(button) then
-				local GVAR_TargetButton = GVAR.TargetButton[button];
-				if(GVAR_TargetButton) then
-					GVAR_TargetButton.FlagTexture:SetAlpha(1);
-				end
-			end
-			BattlegroundTargets:CheckFlagCarrierEND();
-			return;
-		end
-	end
-	ENEMY_FirstFlagCheck[targetName] = nil;
-	local x = 0;
-	for k in pairs(ENEMY_FirstFlagCheck) do
-		x = x + 1;
-	end
-	if(x == 0) then
-		BattlegroundTargets:CheckFlagCarrierEND();
-	end
-end
-
-function BattlegroundTargets:CheckFlagCarrierSTART()
-	flagCHK = true;
-	flagflag = true;
-	table_wipe(ENEMY_FirstFlagCheck);
-	for i = 1, #ENEMY_Data do
-		ENEMY_FirstFlagCheck[ENEMY_Data[i].name] = 1;
-	end
-	for num = 1, GetNumRaidMembers() do
-		local unitID = "raid"..num;
-		for i = 1, 40 do
-			local spellID = select(10, UnitBuff(unitID, i));
-			if not spellID then break end
-			if flagIDs[spellID] then return end
-		end
-	end
-	BattlegroundTargets:RegisterEvent("UNIT_TARGET");
-	BattlegroundTargets:RegisterEvent("UPDATE_MOUSEOVER_UNIT");
-	BattlegroundTargets:RegisterEvent("PLAYER_TARGET_CHANGED");
-end
-
-function BattlegroundTargets:CheckFlagCarrierEND() -- FLAGSPY
-	flagCHK = nil;
-	flagflag = true;
-	wipe(ENEMY_FirstFlagCheck);
-	if not OPT.ButtonShowHealthBar[currentSize] and
-	   not OPT.ButtonShowHealthText[currentSize] and
-	   not OPT.ButtonShowTargetCount[currentSize] and
-	   not OPT.ButtonShowAssist[currentSize] and
-	   not OPT.ButtonShowLeader[currentSize] and
-	   not OPT.ButtonShowHealer[currentSize] and
-	   (not OPT.ButtonRangeCheck[currentSize] or OPT.ButtonTypeRangeCheck[currentSize] < 2) and
-	   not isLowLevel -- LVLCHK
-	then
-		BattlegroundTargets:UnregisterEvent("UNIT_TARGET")
-	end
-	if not OPT.ButtonShowHealthBar[currentSize] and
-	   not OPT.ButtonShowHealthText[currentSize] and
-	   (not OPT.ButtonRangeCheck[currentSize] or OPT.ButtonTypeRangeCheck[currentSize] < 2)
-	then
-		BattlegroundTargets:UnregisterEvent("UPDATE_MOUSEOVER_UNIT")
-	end
-	if not OPT.ButtonShowTarget[currentSize] and
-	   (not OPT.ButtonRangeCheck[currentSize] or OPT.ButtonTypeRangeCheck[currentSize] < 2) and 
-	   not OPT.ButtonShowHealer[currentSize]
-	then
-		BattlegroundTargets:UnregisterEvent("PLAYER_TARGET_CHANGED")
-	end
-end
-
 function BattlegroundTargets:BattlefieldCheck()
 	if(not inWorld) then return; end
 	local _, instanceType = IsInInstance();
@@ -1965,7 +1805,6 @@ end
 
 function BattlegroundTargets:IsBattleground()
 	inBattleground = true;
-	isFlagBG = 0;
 	if hdlog and not BattlegroundTargets_Options.hdlog then
 		HDLog(L["Logging of healers detection is enabled.\nType |cff55c912/bgt hdlog|r again to disable."]);
 	elseif not hdlog and BattlegroundTargets_Options.hdlog then
@@ -2021,19 +1860,11 @@ function BattlegroundTargets:IsBattleground()
 	if bgName then
 		currentSize = bgSize[ bgName ];
 		reSizeCheck = 10;
-		local flagBGnum = flagBG[ bgName ];
-		if(flagBGnum) then
-			isFlagBG = flagBGnum;
-		end
 	else
 		local zone = GetRealZoneText();
 		if(BGN[zone]) then
 			currentSize = bgSize[ BGN[zone] ];
 			reSizeCheck = 10;
-			local flagBGnum = flagBG[ BGN[zone] ];
-			if(flagBGnum) then
-				isFlagBG = flagBGnum;
-			end
 		else
 			if(reSizeCheck >= 10) then
 				Print("ERROR", "unknown battleground name", locale, queueMapName, zone);
@@ -2070,29 +1901,6 @@ function BattlegroundTargets:IsBattleground()
 				end
 			end
 			BattlegroundTargets:SetupButtonLayout();
-			if(OPT.ButtonShowFlag[currentSize]) then
-				if bgName == "Warsong Gulch" then
-					local flagIcon;
-					if(playerFactionBG == 0) then
-						flagIcon = "Interface\\WorldStateFrame\\HordeFlag";
-					else
-						flagIcon = "Interface\\WorldStateFrame\\AllianceFlag";
-					end
-					for i = 1, currentSize do
-						GVAR.TargetButton[i].FlagTexture:SetTexture(flagIcon);
-					end
-				elseif bgName == "Eye of the Storm" then
-					local flagIcon;
-					if(playerFactionBG == 0) then
-						flagIcon = "Interface\\WorldStateFrame\\AllianceFlag";
-					else
-						flagIcon = "Interface\\WorldStateFrame\\HordeFlag";
-					end
-					for i = 1, currentSize do
-						GVAR.TargetButton[i].FlagTexture:SetTexture(flagIcon);
-					end					
-				end
-			end
 		else
 			GVAR.MainFrame:Hide();
 			for i = 1, 40 do
@@ -2109,8 +1917,6 @@ function BattlegroundTargets:IsBattleground()
 	BattlegroundTargets:UnregisterEvent("UNIT_TARGET");
 	BattlegroundTargets:UnregisterEvent("PLAYER_TARGET_CHANGED");
 	BattlegroundTargets:UnregisterEvent("PLAYER_FOCUS_CHANGED");
-	BattlegroundTargets:UnregisterEvent("CHAT_MSG_BG_SYSTEM_HORDE");
-	BattlegroundTargets:UnregisterEvent("CHAT_MSG_BG_SYSTEM_ALLIANCE");
 	BattlegroundTargets:UnregisterEvent("RAID_ROSTER_UPDATE");
 	BattlegroundTargets:UnregisterEvent("COMBAT_LOG_EVENT_UNFILTERED");
 	BattlegroundTargets:UnregisterEvent("UPDATE_BATTLEFIELD_SCORE");
@@ -2140,13 +1946,6 @@ function BattlegroundTargets:IsBattleground()
 
 		if(OPT.ButtonShowFocus[currentSize]) then
 			BattlegroundTargets:RegisterEvent("PLAYER_FOCUS_CHANGED");
-		end
-
-		if(OPT.ButtonShowFlag[currentSize]) then
-			if(currentSize == 10 or currentSize == 15) then
-				BattlegroundTargets:RegisterEvent("CHAT_MSG_BG_SYSTEM_HORDE");
-				BattlegroundTargets:RegisterEvent("CHAT_MSG_BG_SYSTEM_ALLIANCE");
-			end
 		end
 		
 		if(OPT.ButtonShowAssist[currentSize]) then
@@ -2234,13 +2033,9 @@ function BattlegroundTargets:IsNotBattleground()
 	inBattleground      = false;
 	reSizeCheck         = 0;
 	oppositeFactionREAL = nil;
-	isFlagBG            = 0;
-	flagCHK             = nil;
-	flagflag            = nil;
 	scoreUpdateCount    = 0;
 	isLeader            = nil;
 	isHealer            = nil;
-	hasFlag             = nil;
 	reCheckBG           = nil;
 	reCheckScore        = nil;
 	factionIsValid      = false;
@@ -2277,8 +2072,6 @@ function BattlegroundTargets:IsNotBattleground()
 	BattlegroundTargets:UnregisterEvent("UNIT_TARGET");
 	BattlegroundTargets:UnregisterEvent("PLAYER_TARGET_CHANGED");
 	BattlegroundTargets:UnregisterEvent("PLAYER_FOCUS_CHANGED");
-	BattlegroundTargets:UnregisterEvent("CHAT_MSG_BG_SYSTEM_HORDE");
-	BattlegroundTargets:UnregisterEvent("CHAT_MSG_BG_SYSTEM_ALLIANCE");
 	BattlegroundTargets:UnregisterEvent("RAID_ROSTER_UPDATE");
 	BattlegroundTargets:UnregisterEvent("COMBAT_LOG_EVENT_UNFILTERED");
 	BattlegroundTargets:UnregisterEvent("UPDATE_BATTLEFIELD_SCORE");
@@ -2288,7 +2081,6 @@ function BattlegroundTargets:IsNotBattleground()
 	end
 	
 	table_wipe(ENEMY_Names);
-	table_wipe(ENEMY_Names4Flag);
 	table_wipe(ENEMY_Name2Button);
 	table_wipe(ENEMY_Name2Percent);
 	table_wipe(ENEMY_Name2Range);
@@ -2303,13 +2095,8 @@ function BattlegroundTargets:IsNotBattleground()
 	else
 		reCheckBG = false;
 		GVAR.MainFrame:Hide();
-		local flagIcon = "Interface\\WorldStateFrame\\AllianceFlag";
-		if(playerFactionDEF == 0) then
-			flagIcon = "Interface\\WorldStateFrame\\HordeFlag";
-		end
 		for i = 1, 40 do
 			local GVAR_TargetButton = GVAR.TargetButton[i];
-			GVAR_TargetButton.FlagTexture:SetTexture(flagIcon);
 			GVAR_TargetButton:Hide();
 		end
 	end
@@ -2435,11 +2222,6 @@ function BattlegroundTargets:CheckUnitTarget(unitID, unitName)
 	
 	local curTime = GetTime();
 	
-	if(flagCHK and isFlagBG > 0) then
-		if(OPT.ButtonShowFlag[currentSize]) then
-			BattlegroundTargets:CheckFlagCarrierCHECK(enemyID, enemyName);
-		end
-	end
 	
 	if(OPT.ButtonShowTargetCount[currentSize]) then
 		if(curTime > targetCountForceUpdate + targetCountFrequency) then
@@ -2690,12 +2472,6 @@ function BattlegroundTargets:CheckUnitHealth(unitID, unitName, healthonly)
 	
 	if(healthonly) then return; end
 	
-	if(flagCHK and isFlagBG > 0) then
-		if(OPT.ButtonShowFlag[currentSize]) then
-			BattlegroundTargets:CheckFlagCarrierCHECK(targetID, targetName);
-		end
-	end
-	
 	if(rangeSpellName and OPT.ButtonTypeRangeCheck[currentSize] >= 2) then
 		local curTime = GetTime();
 		local Name2Range = ENEMY_Name2Range[targetName];
@@ -2710,47 +2486,6 @@ function BattlegroundTargets:CheckUnitHealth(unitID, unitName, healthonly)
 		else
 			ENEMY_Name2Range[targetName] = nil;
 			Range_Display(false, GVAR_TargetButton, OPT.ButtonRangeDisplay[currentSize], OPT.ButtonShowHealer[currentSize]);
-		end
-	end
-end
-
-function BattlegroundTargets:FlagCheck(message, messageFaction)
-	if messageFaction == playerFactionBG then
-		if string_match(message, FLG["WSG_TP_MATCH_CAPTURED"]) or message == FLG["EOTS_STRING_CAPTURED_BY_ALLIANCE"] or message == FLG["EOTS_STRING_CAPTURED_BY_HORDE"] then
-			for i = 1, currentSize do GVAR.TargetButton[i].FlagTexture:SetAlpha(0) end
-			hasFlag = nil
-			if flagCHK then BattlegroundTargets:CheckFlagCarrierEND() end
-		elseif string_match(message, FLG["WSG_TP_MATCH_DROPPED"]) then
-			for i = 1, currentSize do GVAR.TargetButton[i].FlagTexture:SetAlpha(0) end
-			hasFlag = nil
-		end
-	else
-		local efc = string_match(message, FLG["WSG_TP_REGEX_PICKED1"]) or string_match(message, FLG["WSG_TP_REGEX_PICKED2"]) or string_match(message, FLG["EOTS_REGEX_PICKED"])
-		if efc then
-			for i = 1, currentSize do GVAR.TargetButton[i].FlagTexture:SetAlpha(0) end
-			if flagCHK then BattlegroundTargets:CheckFlagCarrierEND() end
-			for name, button in pairs(ENEMY_Names4Flag) do
-				if name == efc then
-					local GVAR_TargetButton = GVAR.TargetButton[button];
-					if GVAR_TargetButton then
-						GVAR_TargetButton.FlagTexture:SetAlpha(1)
-						for fullname, fullnameButton in pairs(ENEMY_Name2Button) do
-							if button == fullnameButton then
-								hasFlag = fullname
-								return
-							end
-						end
-					end
-					return
-				end
-			end
-		elseif string_match(message, FLG["WSG_TP_MATCH_CAPTURED"]) or message == FLG["EOTS_STRING_CAPTURED_BY_ALLIANCE"] or message == FLG["EOTS_STRING_CAPTURED_BY_HORDE"] then
-			for i = 1, currentSize do GVAR.TargetButton[i].FlagTexture:SetAlpha(0) end
-			hasFlag = nil
-			if flagCHK then BattlegroundTargets:CheckFlagCarrierEND() end
-		elseif string_match(message, FLG["EOTS_STRING_DROPPED"]) then
-			for i = 1, currentSize do GVAR.TargetButton[i].FlagTexture:SetAlpha(0) end
-			hasFlag = nil		
 		end
 	end
 end
@@ -3047,14 +2782,6 @@ local function OnEvent(a1, a2, a3, a4, a5, a6, a7, a8, a9)
 		if OPT.ButtonShowAssist[currentSize] then
 			BattlegroundTargets:CheckAssist()
 		end
-
-	elseif event == "CHAT_MSG_BG_SYSTEM_HORDE" then
-		local arg1 = ev_arg1
-		BattlegroundTargets:FlagCheck(arg1, 0)
-
-	elseif event == "CHAT_MSG_BG_SYSTEM_ALLIANCE" then
-		local arg1 = ev_arg1
-		BattlegroundTargets:FlagCheck(arg1, 1)
 
 	--[[ elseif event == "CHAT_MSG_RAID_BOSS_EMOTE" then
 		local arg1 = ...

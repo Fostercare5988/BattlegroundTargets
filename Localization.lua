@@ -22,7 +22,6 @@ BattlegroundTargets_Localization = {
 	["Show Guild Groups"] = true,
 	["Show Target"] = true,
 	["Show Focus"] = true,
-	["Show Flag Carrier"] = true,
 	["Show Main Assist Target"] = true,
 	["Show Target Count"] = true,
 	["Show Health Bar"] = true,
@@ -77,20 +76,6 @@ BattlegroundTargets_BGNames = {
 	["Warsong Gulch"] = "Warsong Gulch",
 	["Arathi Basin"] = "Arathi Basin",
 }
-
--- Flag Carrier Notification Regexes
-BattlegroundTargets_Flag = {
-	["WSG_TP_REGEX_PICKED1"] = "was picked up by (.+)!",
-	["WSG_TP_REGEX_PICKED2"] = "was picked up by (.+)!",
-	["WSG_TP_MATCH_DROPPED"] = "was dropped",
-	["WSG_TP_MATCH_CAPTURED"] = "captured the",
-}
-
-function BattlegroundTargets_Flag:CreateLocaleTable(t)
-	for k, v in pairs(t) do
-		self[k] = (v == true and k) or v
-	end
-end
 
 -- Race to Faction Mapping (0 = Horde, 1 = Alliance)
 local HORDE = 0

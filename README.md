@@ -32,9 +32,7 @@ To run this modernized build, the following client extensions are strictly requi
 - **Unrestricted Combat Targeting**: Unlike retail/Classic Era where targeting buttons are locked behind `SecureActionButtonTemplate` restrictions during combat, our SuperWoW integration provides instant exact-name targeting via `TargetByName(name, true)` at all times.
 - **Child Element Click Passthrough**: Explicit `:EnableMouse(false)` configured across all text labels, target indicators, assist markers, and class overlays (Rule C8) to eliminate click interception.
 - **Dynamic 10v10, 15v15 & 40v40 Layouts**: Automatically switches layout and scales depending on whether you are in Warsong Gulch, Arathi Basin, or Alterac Valley.
-- **Healer & Role Detection**: Identifies enemy healers through combat log aura analysis and cross-faction database caching.
-- **Flag Carrier Tracking**: Real-time tracking of Warsong Gulch flag carriers.
-- **100% Clean English Standard**: Purged of redundant foreign localization files in compliance with Rule H2.
+- **Dedicated Enemy Roster & Targeting Authority**: Focused enemy roster unit frames with real-time health, target counts, focus indicators, and healer detection. WSG flag carrier tracking has been cleanly offloaded to AutoBG for unified battlefield objective management.
 
 ---
 
