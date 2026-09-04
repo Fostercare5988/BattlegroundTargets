@@ -632,7 +632,11 @@ function BGT:ToggleOptions()
 		BGT:CreateOptionsFrame()
 	end
 	if BattlegroundTargets_OptionsFrame then
-		BattlegroundTargets_OptionsFrame:SetShown(not BattlegroundTargets_OptionsFrame:IsShown())
+		if BattlegroundTargets_OptionsFrame:IsShown() then
+			BattlegroundTargets_OptionsFrame:Hide()
+		else
+			BattlegroundTargets_OptionsFrame:Show()
+		end
 	end
 end
 

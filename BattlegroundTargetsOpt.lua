@@ -46,6 +46,7 @@ function BGT:CreateOptionsFrame()
 	if BattlegroundTargets_OptionsFrame then return end
 
 	local f = CreateFrame("Frame", "BattlegroundTargets_OptionsFrame", UIParent)
+	f:Hide()
 	f:SetWidth(330)
 	f:SetHeight(330)
 	f:SetMovable(true)
@@ -257,8 +258,6 @@ function BGT:CreateOptionsFrame()
 	f:SetScript("OnHide", function()
 		BGT:DisableConfigMode()
 	end)
-
-	SelectTab(10)
 end
 
 function BGT:UpdateOptionsWidgets(sz)
