@@ -583,9 +583,19 @@ local function ffGetTextCoords(tcutsize)
 end
 
 local function CreateBorder(name, parent, size, tcut)
-	local this = CreateFrame('Frame', name, parent)
-	this:SetAllPoints()
-	this:SetFrameLevel(parent:GetFrameLevel() + 1)
+	if not parent then return nil end
+	local parentFrame = parent
+	if not parent.GetFrameLevel and parent.GetParent then
+		parentFrame = parent:GetParent()
+	end
+	if not parentFrame or not parentFrame.CreateTexture then return nil end
+
+	local this = CreateFrame('Frame', name, parentFrame)
+	this:ClearAllPoints()
+	this:SetPoint('TOPLEFT', parent, 'TOPLEFT', 0, 0)
+	this:SetPoint('BOTTOMRIGHT', parent, 'BOTTOMRIGHT', 0, 0)
+	local level = (parentFrame.GetFrameLevel and parentFrame:GetFrameLevel() or 1) + 1
+	this:SetFrameLevel(level)
 
 	local tcutsize = tcut or ffDefaultTcut
 	local corners, sides = ffGetTextCoords(tcutsize)
@@ -659,10 +669,17 @@ end
 
 local function CreateCooldown(parentFrame, scale, rev)
 	if not parentFrame then return nil end
-	local name = parentFrame.GetName and parentFrame:GetName() or "BGTCD"
-	local cd = CreateFrame('Model', name .. 'Cooldown', parentFrame)
+	local actualParent = parentFrame
+	if not parentFrame.GetFrameLevel and parentFrame.GetParent then
+		actualParent = parentFrame:GetParent()
+	end
+	if not actualParent or not actualParent.CreateTexture then return nil end
+
+	local cd = CreateFrame('Model', nil, actualParent)
 	cd:SetModel([[Interface\Cooldown\UI-Cooldown-Indicator.mdx]])
-	cd:SetAllPoints()
+	cd:ClearAllPoints()
+	cd:SetPoint('TOPLEFT', parentFrame, 'TOPLEFT', 0, 0)
+	cd:SetPoint('BOTTOMRIGHT', parentFrame, 'BOTTOMRIGHT', 0, 0)
 	if scale then cd:SetScale(scale) end
 
 	cd.timeStart = 0
@@ -697,7 +714,7 @@ local function ffSmooth(self, value)
 end
 
 local function SmoothBar(bar)
-	if not bar or bar.SetValue_ then return end
+	if not bar or not bar.GetMinMaxValues or bar.SetValue_ then return end
 	bar.SetValue_ = bar.SetValue
 	bar.SetValue = ffSmooth
 end
@@ -706,15 +723,19 @@ local ffSmoothTicker = CreateFrame('Frame')
 ffSmoothTicker:SetScript('OnUpdate', function()
 	local dt = arg1 or 0.016
 	for bar, target in pairs(ffSmoothing) do
-		local cur = bar:GetValue()
-		local diff = target - cur
-		if (diff < 0 and -diff < 0.5) or (diff >= 0 and diff < 0.5) then
-			bar:SetValue_(target)
-			ffSmoothing[bar] = nil
+		if bar and bar.GetValue and bar.SetValue_ then
+			local cur = bar:GetValue()
+			local diff = target - cur
+			if (diff < 0 and -diff < 0.5) or (diff >= 0 and diff < 0.5) then
+				bar:SetValue_(target)
+				ffSmoothing[bar] = nil
+			else
+				local rate = math.min(1.0, dt * 15.0)
+				local new = cur + (diff * rate)
+				bar:SetValue_(new)
+			end
 		else
-			local rate = math.min(1.0, dt * 15.0)
-			local new = cur + (diff * rate)
-			bar:SetValue_(new)
+			ffSmoothing[bar] = nil
 		end
 	end
 end)
@@ -2219,7 +2240,7 @@ function BattlegroundTargets:CreateFrames()
 
 		-- FosterFrames WSG Visual Theme Elements
 		GVAR_TargetButton.ffBorder = CreateBorder(nil, GVAR_TargetButton, 10, 1 / 5);
-		GVAR_TargetButton.ffBorder:Hide();
+		if GVAR_TargetButton.ffBorder then GVAR_TargetButton.ffBorder:Hide(); end
 
 		GVAR_TargetButton.manabar = CreateFrame("StatusBar", nil, GVAR_TargetButton);
 		GVAR_TargetButton.manabar:SetFrameLevel(GVAR_TargetButton:GetFrameLevel() + 2);
@@ -2234,12 +2255,12 @@ function BattlegroundTargets:CreateFrames()
 		GVAR_TargetButton.manabar:Hide();
 
 		GVAR_TargetButton.ClassBorder = CreateBorder(nil, GVAR_TargetButton.ClassTexture, 8, 1 / 5);
-		GVAR_TargetButton.ClassBorder:Hide();
+		if GVAR_TargetButton.ClassBorder then GVAR_TargetButton.ClassBorder:Hide(); end
 
 		GVAR_TargetButton.ClassCooldown = CreateCooldown(GVAR_TargetButton.ClassTexture, 0.58, true);
-		GVAR_TargetButton.ClassCooldown:Hide();
+		if GVAR_TargetButton.ClassCooldown then GVAR_TargetButton.ClassCooldown:Hide(); end
 
-		SmoothBar(GVAR_TargetButton.HealthBar);
+		SmoothBar(GVAR_TargetButton.manabar);
 	end
 
 	GVAR.ScoreUpdateTexture = GVAR.TargetButton[1]:CreateTexture(nil, "OVERLAY");
@@ -2328,6 +2349,10 @@ function BattlegroundTargets:CreateInterfaceOptions()
 end
 
 function BattlegroundTargets:CreateOptionsFrame()
+	BattlegroundTargets:EnsureGlobalTables();
+	if not GVAR.TargetButton or not GVAR.MainFrame then
+		BattlegroundTargets:CreateFrames();
+	end
 	BattlegroundTargets:DefaultShuffle();
 
 	local heightBase = 58; -- 10+16+10+22
@@ -3422,7 +3447,9 @@ function BattlegroundTargets:CreateOptionsFrame()
 	if(frameWidth < 400) then frameWidth = 400; end
 	if(frameWidth > 650) then frameWidth = 650; end
 	
-	GVAR.OptionsFrame:SetClampRectInsets((frameWidth - 50) / 2, -((frameWidth - 50) / 2), -(heightTotal - 35), heightTotal - 35);
+	if GVAR.OptionsFrame.SetClampRectInsets then
+		GVAR.OptionsFrame:SetClampRectInsets((frameWidth - 50) / 2, -((frameWidth - 50) / 2), -(heightTotal - 35), heightTotal - 35);
+	end
 	GVAR.OptionsFrame:SetWidth(frameWidth);
 	GVAR.OptionsFrame.CloseConfig:SetWidth(frameWidth - 20);
 	
@@ -3911,79 +3938,90 @@ function BattlegroundTargets:SetupLayout()
 		
 		return;
 	end
-	
+
+	if not GVAR.TargetButton then
+		BattlegroundTargets:CreateFrames();
+	end
+	if not GVAR.TargetButton then return end
+
 	local LayoutTH = BattlegroundTargets_Options.LayoutTH[currentSize];
 	local LayoutSpace = BattlegroundTargets_Options.LayoutSpace[currentSize];
 	
 	if(currentSize == 10) then
 		for i = 1, currentSize do
-			if(LayoutTH == 81) then
-				if(i == 6) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[1], "TOPRIGHT", LayoutSpace, 0);
-				elseif(i > 1) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
-				end
-			elseif(LayoutTH == 18) then
-				if(i > 1) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
+			if GVAR.TargetButton[i] then
+				if(LayoutTH == 81) then
+					if(i == 6) and GVAR.TargetButton[1] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[1], "TOPRIGHT", LayoutSpace, 0);
+					elseif(i > 1) and GVAR.TargetButton[(i-1)] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
+					end
+				elseif(LayoutTH == 18) then
+					if(i > 1) and GVAR.TargetButton[(i-1)] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
+					end
 				end
 			end
 		end
 	elseif(currentSize == 15) then
 		for i = 1, currentSize do
-			if(LayoutTH == 81) then
-				if(i == 6) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[1], "TOPRIGHT", LayoutSpace, 0);
-				elseif(i == 11) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[6], "TOPRIGHT", LayoutSpace, 0);
-				elseif(i > 1) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
-				end
-			elseif(LayoutTH == 18) then
-				if(i > 1) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
+			if GVAR.TargetButton[i] then
+				if(LayoutTH == 81) then
+					if(i == 6) and GVAR.TargetButton[1] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[1], "TOPRIGHT", LayoutSpace, 0);
+					elseif(i == 11) and GVAR.TargetButton[6] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[6], "TOPRIGHT", LayoutSpace, 0);
+					elseif(i > 1) and GVAR.TargetButton[(i-1)] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
+					end
+				elseif(LayoutTH == 18) then
+					if(i > 1) and GVAR.TargetButton[(i-1)] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
+					end
 				end
 			end
 		end
 	elseif(currentSize == 40) then
 		for i = 1, currentSize do
-			if(LayoutTH == 81) then
-				if (i == 6) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[1], "TOPRIGHT", LayoutSpace, 0);
-				elseif (i == 11) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[6], "TOPRIGHT", LayoutSpace, 0);
-				elseif (i == 16) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[11], "TOPRIGHT", LayoutSpace, 0);
-				elseif (i == 21) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[16], "TOPRIGHT", LayoutSpace, 0);
-				elseif (i == 26) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[21], "TOPRIGHT", LayoutSpace, 0);
-				elseif (i == 31) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[26], "TOPRIGHT", LayoutSpace, 0);
-				elseif (i == 36) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[31], "TOPRIGHT", LayoutSpace, 0);
-				elseif (i > 1) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
-				end
-			elseif(LayoutTH == 42) then
-				if (i == 11) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[1], "TOPRIGHT", LayoutSpace, 0);
-				elseif(i == 21) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[11], "TOPRIGHT", LayoutSpace, 0);
-				elseif(i == 31) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[21], "TOPRIGHT", LayoutSpace, 0);
-				elseif(i > 1) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
-				end
-			elseif(LayoutTH == 24) then
-				if(i == 21) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[1], "TOPRIGHT", LayoutSpace, 0);
-				elseif(i > 1) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
-				end
-			elseif(LayoutTH == 18) then
-				if(i > 1) then
-					GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
+			if GVAR.TargetButton[i] then
+				if(LayoutTH == 81) then
+					if (i == 6) and GVAR.TargetButton[1] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[1], "TOPRIGHT", LayoutSpace, 0);
+					elseif (i == 11) and GVAR.TargetButton[6] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[6], "TOPRIGHT", LayoutSpace, 0);
+					elseif (i == 16) and GVAR.TargetButton[11] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[11], "TOPRIGHT", LayoutSpace, 0);
+					elseif (i == 21) and GVAR.TargetButton[16] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[16], "TOPRIGHT", LayoutSpace, 0);
+					elseif (i == 26) and GVAR.TargetButton[21] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[21], "TOPRIGHT", LayoutSpace, 0);
+					elseif (i == 31) and GVAR.TargetButton[26] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[26], "TOPRIGHT", LayoutSpace, 0);
+					elseif (i == 36) and GVAR.TargetButton[31] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[31], "TOPRIGHT", LayoutSpace, 0);
+					elseif (i > 1) and GVAR.TargetButton[(i-1)] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
+					end
+				elseif(LayoutTH == 42) then
+					if (i == 11) and GVAR.TargetButton[1] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[1], "TOPRIGHT", LayoutSpace, 0);
+					elseif(i == 21) and GVAR.TargetButton[11] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[11], "TOPRIGHT", LayoutSpace, 0);
+					elseif(i == 31) and GVAR.TargetButton[21] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[21], "TOPRIGHT", LayoutSpace, 0);
+					elseif(i > 1) and GVAR.TargetButton[(i-1)] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
+					end
+				elseif(LayoutTH == 24) then
+					if(i == 21) and GVAR.TargetButton[1] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[1], "TOPRIGHT", LayoutSpace, 0);
+					elseif(i > 1) and GVAR.TargetButton[(i-1)] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
+					end
+				elseif(LayoutTH == 18) then
+					if(i > 1) and GVAR.TargetButton[(i-1)] then
+						GVAR.TargetButton[i]:SetPoint("TOPLEFT", GVAR.TargetButton[(i-1)], "BOTTOMLEFT", 0, 0);
+					end
 				end
 			end
 		end
@@ -3997,6 +4035,12 @@ function BattlegroundTargets:SetupButtonLayout()
 		
 		return;
 	end
+
+	if not GVAR.TargetButton then
+		BattlegroundTargets:CreateFrames();
+	end
+	if not GVAR.TargetButton then return end
+
 	BattlegroundTargets:SetupLayout()
 	
 	local ButtonScale           = OPT.ButtonScale[currentSize];
@@ -4048,9 +4092,9 @@ function BattlegroundTargets:SetupButtonLayout()
 	local useFosterWSG = isWSG and (BattlegroundTargets_Options.UseFosterThemeWSG ~= false);
 
 	for i = 1, currentSize do
-		local GVAR_TargetButton = GVAR.TargetButton[i];
+		local GVAR_TargetButton = GVAR.TargetButton and GVAR.TargetButton[i];
 
-		if useFosterWSG then
+		if GVAR_TargetButton and useFosterWSG then
 			if GVAR_TargetButton.ffBorder then GVAR_TargetButton.ffBorder:Show() end
 			if GVAR_TargetButton.ClassBorder then GVAR_TargetButton.ClassBorder:Show() end
 			if GVAR_TargetButton.manabar then GVAR_TargetButton.manabar:Show() end
@@ -4297,11 +4341,15 @@ function BattlegroundTargets:SetupButtonLayout()
 end
 
 function BattlegroundTargets:Frame_Toggle(frame, show)
+	BattlegroundTargets:EnsureGlobalTables();
+	if not GVAR.TargetButton or not GVAR.MainFrame then
+		BattlegroundTargets:CreateFrames();
+	end
+	if not GVAR.OptionsFrame then
+		BattlegroundTargets:CreateOptionsFrame();
+	end
 	if not frame then
-		if not GVAR.OptionsFrame then
-			BattlegroundTargets:CreateOptionsFrame()
-		end
-		frame = GVAR.OptionsFrame
+		frame = GVAR.OptionsFrame;
 	end
 	if not frame then return end
 	if(show) then
@@ -4495,16 +4543,25 @@ function BattlegroundTargets:EnableConfigMode()
 		testDataLoaded = true;
 	end
 	
+	if not GVAR.TargetButton or not GVAR.MainFrame then
+		BattlegroundTargets:CreateFrames();
+	end
 	currentSize = testSize;
 	BattlegroundTargets:Frame_SetupPosition("BattlegroundTargets_MainFrame");
 	BattlegroundTargets:SetOptions();
 	
-	GVAR.MainFrame:Show();
-	GVAR.MainFrame:EnableMouse(true);
-	GVAR.MainFrame:SetHeight(20);
-	GVAR.MainFrame.Movetext:Show();
-	GVAR.TargetButton[1]:SetPoint("TOPLEFT", GVAR.MainFrame, "BOTTOMLEFT", 0, 0);
-	GVAR.ScoreUpdateTexture:Hide();
+	if GVAR.MainFrame then
+		GVAR.MainFrame:Show();
+		GVAR.MainFrame:EnableMouse(true);
+		GVAR.MainFrame:SetHeight(20);
+		if GVAR.MainFrame.Movetext then GVAR.MainFrame.Movetext:Show(); end
+	end
+	if GVAR.TargetButton and GVAR.TargetButton[1] then
+		GVAR.TargetButton[1]:SetPoint("TOPLEFT", GVAR.MainFrame, "BOTTOMLEFT", 0, 0);
+	end
+	if GVAR.ScoreUpdateTexture then
+		GVAR.ScoreUpdateTexture:Hide();
+	end
 	
 	BattlegroundTargets:ShufflerFunc("ShuffleCheck");
 	BattlegroundTargets:SetupButtonLayout();
@@ -4512,10 +4569,12 @@ function BattlegroundTargets:EnableConfigMode()
 	BattlegroundTargets:SetConfigButtonValues();
 
 	for i = 1, 40 do
-		if(i < currentSize + 1) then
-			GVAR.TargetButton[i]:Show();
-		else
-			GVAR.TargetButton[i]:Hide();
+		if GVAR.TargetButton and GVAR.TargetButton[i] then
+			if(i < currentSize + 1) then
+				GVAR.TargetButton[i]:Show();
+			else
+				GVAR.TargetButton[i]:Hide();
+			end
 		end
 	end
 
@@ -4534,10 +4593,14 @@ function BattlegroundTargets:DisableConfigMode()
 	currentSize = testSize;
 	BattlegroundTargets:SetOptions();
 
-	GVAR.MainFrame:Hide();
+	if GVAR.MainFrame then
+		GVAR.MainFrame:Hide();
+	end
 	
 	for i = 1, 40 do
-		GVAR.TargetButton[i]:Hide();
+		if GVAR.TargetButton and GVAR.TargetButton[i] then
+			GVAR.TargetButton[i]:Hide();
+		end
 	end
 	
 	isTarget = 0;
@@ -6605,11 +6668,13 @@ local function OnEvent(a1, a2, a3, a4, a5, a6, a7, a8, a9)
 				DBUtils:CheckHealersDataBase(BattlegroundTargets_HealersDB)
 			end
 		end
-		hooksecurefunc("PanelTemplates_SetTab", function(frame)
-			if frame and frame == WorldStateScoreFrame then
-				BattlegroundTargets:ScoreWarningCheck()
-			end
-		end)
+		if hooksecurefunc then
+			hooksecurefunc("PanelTemplates_SetTab", function(frame)
+				if frame and frame == WorldStateScoreFrame then
+					BattlegroundTargets:ScoreWarningCheck()
+				end
+			end)
+		end
 		table.insert(UISpecialFrames, "BattlegroundTargets_OptionsFrame")
 		BattlegroundTargets:UnregisterEvent("PLAYER_LOGIN")
 
