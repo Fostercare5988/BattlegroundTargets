@@ -1,7 +1,7 @@
 # BattlegroundTargets (World of Warcraft 1.12.1 Enhanced)
 
 [![Client](https://img.shields.io/badge/Client-1.12.1%20Vanilla-blue.svg)](#)
-[![ClassicAPI](https://img.shields.io/badge/ClassicAPI-v1.13.3+-orange.svg)](#)
+[![ClassicAPI](https://img.shields.io/badge/ClassicAPI-v1.13.4+-orange.svg)](#)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-v2.2+-brightgreen.svg)](#)
 [![UnitXP](https://img.shields.io/badge/UnitXP_SP3-v89+-purple.svg)](#)
 [![DXVK](https://img.shields.io/badge/DXVK-Vulkan-red.svg)](#)
@@ -19,7 +19,7 @@ To run this modernized build, the following client extensions are strictly requi
 
 | Component | Minimum Version | Architectural Role |
 | :--- | :---: | :--- |
-| **ClassicAPI.dll** | `v1.13.3+` | Modern Lua environment & compatibility layers. |
+| **ClassicAPI.dll** | `v1.13.4+` | Modern Lua environment & compatibility layers. |
 | **SuperWoW.dll** | `v2.2+` | Instantaneous `TargetByName(name, true)` exact-name targeting in and out of combat without lockdown taint. |
 | **NamPower.dll** | `v4.6.3+` | Fast hardware spell querying & event routing. |
 | **UnitXP SP3** | `v89+` | Accurate 3D Euclidean distances (`UnitXP("distance", unit)`). |

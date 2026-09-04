@@ -2,7 +2,7 @@
 ## Title: BattlegroundTargets
 ## Author: kunda, Fostercare5988
 ## Version: 3.0.0
-## Notes: Enemy Unit Frames for battlegrounds engineered natively for World of Warcraft 1.12.1 (ClassicAPI v1.13.3+, SuperWoW v2.2+, NamPower v4.6.3+, UnitXP SP3 v89+, DXVK).
+## Notes: Enemy Unit Frames for battlegrounds engineered natively for World of Warcraft 1.12.1 (ClassicAPI v1.13.4+, SuperWoW v2.2+, NamPower v4.6.3+, UnitXP SP3 v89+, DXVK).
 ## SavedVariables: BattlegroundTargets_Options, BattlegroundTargets_HealersDB 
 ## SavedVariablesPerCharacter: BattlegroundTargets_Character
 
