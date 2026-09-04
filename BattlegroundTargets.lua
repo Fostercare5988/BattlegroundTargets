@@ -138,6 +138,25 @@ BattlegroundTargets_HealersDB = {};
 
 BattlegroundTargets = CreateFrame("Frame", "BattlegroundTargets");
 _G["BattlegroundTargets"] = BattlegroundTargets;
+
+function BattlegroundTargets:EnsureGlobalTables()
+	if type(BattlegroundTargets_Options) ~= "table" then
+		BattlegroundTargets_Options = {};
+	end
+	if type(BattlegroundTargets_Character) ~= "table" then
+		BattlegroundTargets_Character = {};
+	end
+	if type(BattlegroundTargets_HealersDB) ~= "table" then
+		BattlegroundTargets_HealersDB = {};
+	end
+	if not BattlegroundTargets_Character.NativeFaction then
+		local faction = UnitFactionGroup and UnitFactionGroup("player");
+		if faction then
+			BattlegroundTargets_Character.NativeFaction = faction;
+		end
+	end
+end
+BattlegroundTargets:EnsureGlobalTables();
 local MOD_VERSION = "1.14.2-Vanilla";
 
 local L   = BattlegroundTargets_Localization;
@@ -894,32 +913,31 @@ end
 TEMPLATE.TextButton = function(button, text, action)
 	local buttoncolor;
 	local bordercolor;
+	local fontObj = (action == 1 or action > 4) and GameFontNormal or GameFontNormalSmall;
+	local fontDis = (action == 1 or action > 4) and GameFontDisable or GameFontDisableSmall;
 
 	if(action == 1) then
-		button:SetNormalFontObject("GameFontNormal");
-		button:SetDisabledFontObject("GameFontDisable");
 		buttoncolor = { 0.38, 0, 0, 1 };
 		bordercolor = { 0.73, 0.26, 0.21, 1 };
 	elseif(action == 2) then
-		button:SetNormalFontObject("GameFontNormalSmall");
-		button:SetDisabledFontObject("GameFontDisableSmall");
 		buttoncolor = { 0, 0, 0.5, 1 };
 		bordercolor = { 0.43, 0.32, 0.68, 1 };
 	elseif(action == 3) then
-		button:SetNormalFontObject("GameFontNormalSmall");
-		button:SetDisabledFontObject("GameFontDisableSmall");
 		buttoncolor = { 0, 0.2, 0, 1 };
 		bordercolor = { 0.24, 0.46, 0.21, 1 };
 	elseif(action == 4) then
-		button:SetNormalFontObject("GameFontNormalSmall");
-		button:SetDisabledFontObject("GameFontDisableSmall");
 		buttoncolor = { 0.38, 0, 0, 1 };
 		bordercolor = { 0.73, 0.26, 0.21, 1 };
 	else
-		button:SetNormalFontObject("GameFontNormal");
-		button:SetDisabledFontObject("GameFontDisable");
 		buttoncolor = { 0, 0, 0, 1 };
 		bordercolor = { 1, 1, 1, 1 };
+	end
+
+	if button.SetNormalFontObject then
+		button:SetNormalFontObject(fontObj);
+	end
+	if button.SetDisabledFontObject then
+		button:SetDisabledFontObject(fontDis);
 	end
 	
 	button.Background = button:CreateTexture(nil, "BORDER");
@@ -952,6 +970,10 @@ TEMPLATE.TextButton = function(button, text, action)
 	
 	button:SetPushedTextOffset(1, -1);
 	button:SetText(text);
+	local fs = button:GetFontString();
+	if fs and fs.SetFontObject and fontObj then
+		fs:SetFontObject(fontObj);
+	end
 end
 
 TEMPLATE.IconButton = function(button, cut)
@@ -4300,14 +4322,18 @@ function BattlegroundTargets:OptionsFrameHide()
 	PlaySound("igQuestListClose");
 	isConfig = false;
 	testDataLoaded = false;
-	TEMPLATE.EnableTextButton(GVAR.InterfaceOptions.CONFIG, 1);
+	if GVAR.InterfaceOptions and GVAR.InterfaceOptions.CONFIG then
+		TEMPLATE.EnableTextButton(GVAR.InterfaceOptions.CONFIG, 1);
+	end
 	BattlegroundTargets:DisableConfigMode();
 end
 
 function BattlegroundTargets:OptionsFrameShow()
 	PlaySound("igQuestListOpen");
 	isConfig = true;
-	TEMPLATE.DisableTextButton(GVAR.InterfaceOptions.CONFIG);
+	if GVAR.InterfaceOptions and GVAR.InterfaceOptions.CONFIG then
+		TEMPLATE.DisableTextButton(GVAR.InterfaceOptions.CONFIG);
+	end
 	BattlegroundTargets:Frame_SetupPosition("BattlegroundTargets_OptionsFrame");
 	GVAR.OptionsFrame:StartMoving();
 	GVAR.OptionsFrame:StopMovingOrSizing();
@@ -5490,6 +5516,7 @@ function BattlegroundTargets:BattlefieldScoreUpdate()
 end
 
 function BattlegroundTargets:BattlefieldCheck()
+	BattlegroundTargets:EnsureGlobalTables();
 	if(not inWorld) then return; end
 	local _, instanceType = IsInInstance();
 	if instanceType == "pvp" then
@@ -5725,6 +5752,7 @@ function BattlegroundTargets:IsBattleground()
 end
 
 function BattlegroundTargets:IsNotBattleground()
+	BattlegroundTargets:EnsureGlobalTables();
 	if not (inBattleground or reCheckBG or BattlegroundTargets_Character.TempFaction) then return end
 	inBattleground      = false;
 	reSizeCheck         = 0;
@@ -5737,7 +5765,8 @@ function BattlegroundTargets:IsNotBattleground()
 	factionIsValid      = false;
 	icoMinimapFactionBG = nil;
 	BattlegroundTargets_Character.TempFaction = nil;
-	local factionID = BattlegroundTargets:NameFactionToNumber(BattlegroundTargets_Character.NativeFaction);
+	local nativeFac = BattlegroundTargets_Character.NativeFaction or (UnitFactionGroup and UnitFactionGroup("player")) or "Alliance";
+	local factionID = BattlegroundTargets:NameFactionToNumber(nativeFac);
 	MiniMapBattlefieldIcon:SetTexture(battleFieldIconTextures[factionID])
 	MiniMapBattlefieldFrame:SetNormalTexture(battleFieldIconTextures[factionID])
 	if OPT.ButtonShowHealer[10] or OPT.ButtonShowHealer[15] or OPT.ButtonShowHealer[40] then
@@ -6365,6 +6394,7 @@ function BattlegroundTargets:CheckPlayerLevel()
 end
 
 function BattlegroundTargets:CheckNativeFaction()
+	BattlegroundTargets:EnsureGlobalTables();
 	if(BattlegroundTargets_Character.NativeFaction == "Horde") then
 		playerFactionDEF = 0;
 		oppositeFactionDEF = 1;
@@ -6508,7 +6538,11 @@ local function OnEvent(a1, a2, a3, a4, a5, a6, a7, a8, a9)
 			BattlegroundTargets:CheckPlayerLevel()
 		end
 
+	elseif event == "VARIABLES_LOADED" then
+		BattlegroundTargets:EnsureGlobalTables()
+
 	elseif event == "PLAYER_LOGIN" then
+		BattlegroundTargets:EnsureGlobalTables()
 		BattlegroundTargets:CheckNativeFaction()
 		BattlegroundTargets:InitOptions()
 		BattlegroundTargets:CreateInterfaceOptions()
@@ -6549,6 +6583,7 @@ end
 BattlegroundTargets:RegisterEvent("PLAYER_REGEN_DISABLED")
 BattlegroundTargets:RegisterEvent("PLAYER_REGEN_ENABLED")
 BattlegroundTargets:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+BattlegroundTargets:RegisterEvent("VARIABLES_LOADED")
 BattlegroundTargets:RegisterEvent("PLAYER_LOGIN")
 BattlegroundTargets:RegisterEvent("PLAYER_ENTERING_WORLD")
 --BattlegroundTargets:RegisterEvent("CHAT_MSG_RAID_BOSS_EMOTE")
