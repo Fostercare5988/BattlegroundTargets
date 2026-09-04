@@ -76,6 +76,7 @@ function BGT:CreateOptionsFrame()
 	-- Close Button (X)
 	local closeBtn = CreateFrame("Button", nil, f, "UIPanelCloseButton")
 	closeBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -5, -5)
+	closeBtn:SetScript("OnClick", function() f:Hide() end)
 
 	-- Bottom Close Configuration Button
 	local bottomClose = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
@@ -111,6 +112,13 @@ function BGT:CreateOptionsFrame()
 		if tabId == 0 then
 			f.BracketPanel:Hide()
 			f.GeneralPanel:Show()
+			local opt = BattlegroundTargets_Options
+			if f.GeneralPanel.Minimap then
+				f.GeneralPanel.Minimap:SetChecked(opt.MinimapButton and true or false)
+			end
+			if f.GeneralPanel.UseFosterWSG then
+				f.GeneralPanel.UseFosterWSG:SetChecked(opt.UseFosterThemeWSG and true or false)
+			end
 		else
 			f.GeneralPanel:Hide()
 			f.BracketPanel:Show()
@@ -136,7 +144,7 @@ function BGT:CreateOptionsFrame()
 		tab.Text:SetPoint("CENTER", 0, 0)
 		tab.Text:SetText(cfg.name)
 		tab:SetScript("OnClick", function()
-			SelectTab(cfg.id)
+			SelectTab(this.tabId)
 		end)
 		tabs[i] = tab
 	end

@@ -158,16 +158,31 @@ function BGT:EnsureGlobalTables()
 
 	local opt = BattlegroundTargets_Options
 	if not opt.pos then opt.pos = {} end
-	if not opt.EnableBracket then opt.EnableBracket = { [10] = true, [15] = true, [40] = true } end
-	if not opt.IndependentPositioning then opt.IndependentPositioning = { [10] = false, [15] = false, [40] = false } end
-	if not opt.ButtonFontSize then opt.ButtonFontSize = { [10] = 10, [15] = 10, [40] = 10 } end
-	if not opt.ButtonScale then opt.ButtonScale = { [10] = 1.1, [15] = 1.0, [40] = 0.9 } end
-	if not opt.ButtonWidth then opt.ButtonWidth = { [10] = 150, [15] = 150, [40] = 150 } end
-	if not opt.ButtonHeight then opt.ButtonHeight = { [10] = 20, [15] = 20, [40] = 18 } end
-	if not opt.ButtonShowHealthBar then opt.ButtonShowHealthBar = { [10] = true, [15] = true, [40] = true } end
-	if not opt.ButtonShowHealthText then opt.ButtonShowHealthText = { [10] = true, [15] = true, [40] = true } end
-	if not opt.ButtonHideRealm then opt.ButtonHideRealm = { [10] = false, [15] = false, [40] = false } end
-	if not opt.ButtonSortBy then opt.ButtonSortBy = { [10] = 1, [15] = 1, [40] = 1 } end
+	if not opt.EnableBracket then opt.EnableBracket = {} end
+	if not opt.IndependentPositioning then opt.IndependentPositioning = {} end
+	if not opt.ButtonFontSize then opt.ButtonFontSize = {} end
+	if not opt.ButtonScale then opt.ButtonScale = {} end
+	if not opt.ButtonWidth then opt.ButtonWidth = {} end
+	if not opt.ButtonHeight then opt.ButtonHeight = {} end
+	if not opt.ButtonShowHealthBar then opt.ButtonShowHealthBar = {} end
+	if not opt.ButtonShowHealthText then opt.ButtonShowHealthText = {} end
+	if not opt.ButtonHideRealm then opt.ButtonHideRealm = {} end
+	if not opt.ButtonSortBy then opt.ButtonSortBy = {} end
+
+	local brackets = { 10, 15, 40 }
+	for _, b in ipairs(brackets) do
+		if opt.EnableBracket[b] == nil then opt.EnableBracket[b] = true end
+		if opt.IndependentPositioning[b] == nil then opt.IndependentPositioning[b] = false end
+		if opt.ButtonFontSize[b] == nil then opt.ButtonFontSize[b] = 10 end
+		if opt.ButtonScale[b] == nil then opt.ButtonScale[b] = (b == 10 and 1.1 or (b == 15 and 1.0 or 0.9)) end
+		if opt.ButtonWidth[b] == nil then opt.ButtonWidth[b] = 150 end
+		if opt.ButtonHeight[b] == nil then opt.ButtonHeight[b] = (b == 40 and 18 or 20) end
+		if opt.ButtonShowHealthBar[b] == nil then opt.ButtonShowHealthBar[b] = true end
+		if opt.ButtonShowHealthText[b] == nil then opt.ButtonShowHealthText[b] = true end
+		if opt.ButtonHideRealm[b] == nil then opt.ButtonHideRealm[b] = false end
+		if opt.ButtonSortBy[b] == nil then opt.ButtonSortBy[b] = 1 end
+	end
+
 	if opt.MinimapButton == nil then opt.MinimapButton = true end
 	if opt.UseFosterThemeWSG == nil then opt.UseFosterThemeWSG = true end
 
@@ -679,7 +694,8 @@ function BGT:EnableConfigMode(bracketSize)
 		if i <= sz then
 			local cIndex = ((i - 1) % #DUMMY_CLASSES) + 1
 			local cToken = DUMMY_CLASSES[cIndex]
-			local dummyName = "Target" .. string.char(64 + i) .. "-Realm" .. (((i - 1) % 4) + 1)
+			local letter = (i <= 26) and string.char(64 + i) or (string.char(64 + math.floor((i - 1) / 26)) .. string.char(65 + ((i - 1) % 26)))
+			local dummyName = "Target" .. letter .. "-Realm" .. (((i - 1) % 4) + 1)
 			btn.targetName = dummyName
 			btn.classToken = cToken
 
