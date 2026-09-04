@@ -7,9 +7,9 @@
 [![DXVK](https://img.shields.io/badge/DXVK-Vulkan-red.svg)](#)
 [![License](https://img.shields.io/badge/License-GPLv2-yellow.svg)](#)
 
-**BattlegroundTargets** is a high-performance Enemy Unit Frame addon for World of Warcraft 1.12.1 battlegrounds (Warsong Gulch, Arathi Basin, Alterac Valley). 
+**BattlegroundTargets** is a high-performance Enemy Unit Frame addon for World of Warcraft 1.12.1 battlegrounds (Warsong Gulch, Arathi Basin / Eye of the Storm, Alterac Valley).
 
-Originally authored by **kunda** and modernized by **Fostercare5988**, this version has been completely re-engineered from modern Classic Era back to the 1.12.1 Enhanced Client, leveraging native C++ engine extensions for instantaneous exact-name targeting, zero combat lockdown restrictions, and rock-solid high-refresh framerate pacing.
+Engineered specifically for the Enhanced 1.12.1 Client, this version strips away all legacy 2006 bloat, combat-log guessing heuristics, range calculations, and role overlays, focusing exclusively on delivering rock-solid, ultra-fast **Enemy Unit Frames** in three dedicated battleground bracket formats.
 
 ---
 
@@ -19,22 +19,26 @@ To run this modernized build, the following client extensions are strictly requi
 
 | Component | Minimum Version | Architectural Role |
 | :--- | :---: | :--- |
-| **ClassicAPI.dll** | `v1.13.4+` | Modern Lua environment & compatibility layers. |
+| **ClassicAPI.dll** | `v1.13.4+` | Modern Lua environment, native `table.wipe`, C_Timer, and compatibility layers. |
 | **SuperWoW.dll** | `v2.2+` | Instantaneous `TargetByName(name, true)` exact-name targeting in and out of combat without lockdown taint. |
 | **NamPower.dll** | `v4.6.3+` | Fast hardware spell querying & event routing. |
-| **UnitXP SP3** | `v89+` | Accurate 3D Euclidean distances (`UnitXP("distance", unit)`). |
+| **UnitXP SP3** | `v89+` | Accurate numerical health & unit telemetry (`UnitXP("health", unit)`). |
 | **DXVK** | `v2.0+` (e.g. `v3.1`) | Vulkan translation layer ensuring jitter-free frame pacing. |
 
 ---
 
 ## ⚔️ Key Features
 
-- **Unrestricted Combat Targeting**: Unlike retail/Classic Era where targeting buttons are locked behind `SecureActionButtonTemplate` restrictions during combat, our SuperWoW integration provides instant exact-name targeting via `TargetByName(name, true)` at all times.
-- **Child Element Click Passthrough**: Explicit `:EnableMouse(false)` configured across all text labels, target indicators, assist markers, and class overlays (Rule C8) to eliminate click interception.
-- **Dynamic 10v10, 15v15 & 40v40 Layouts**: Automatically switches layout and scales depending on whether you are in Warsong Gulch, Arathi Basin, or Alterac Valley.
-- **Dedicated FosterFrames WSG Visual Theme (10v10)**: In Warsong Gulch, BattlegroundTargets adopts FosterFrames' sleek dark card styling—featuring smooth gradient statusbars (`barTexture.tga`), 8-slice dark borders (`border.tga`), 3px hairline power/mana bars, high-res flat class icons with cooldown spirals, and DXVK-synchronized `SmoothBar` animations.
-- **Compact Tactical Tabular View (15v15 & 40v40)**: In larger battlegrounds (Arathi Basin and Alterac Valley), BGT seamlessly maintains its classic ultra-compact tabular rows to preserve screen real estate.
-- **Dedicated Enemy Roster & Targeting Authority**: Focused enemy roster unit frames with real-time health, target counts, focus indicators, and healer detection. WSG flag carrier tracking has been cleanly offloaded to AutoBG for unified battlefield objective management.
+- **Pure Enemy Frames**: Displays the active enemy roster cleanly with class-colored health status bars, player names, and real-time health percentage numbers. All unneeded role/healer icons, range dropdowns, target count badges, and focus markers have been completely removed.
+- **Unrestricted Instant Targeting**: Left-click instantly targets the exact enemy unit using SuperWoW's native C++ `TargetByName(name, true)` without combat lockdown restrictions or taint. Right-click sets focus via native `FocusUnit`.
+- **Three Dedicated Battleground Brackets**:
+  - **10 vs 10**: Warsong Gulch (supports optional FosterFrames sleek dark card styling).
+  - **15 vs 15**: Arathi Basin and Eye of the Storm.
+  - **40 vs 40**: Alterac Valley.
+- **Independent Layout Customization**: Separate text size, scale, width, height, and display toggles (Show Health Bar, Show Percent, Hide Realm, Class/Name sorting) for each bracket.
+- **Child Element Click Passthrough**: Explicit `:EnableMouse(false)` configured across all text labels, health bars, and background textures (Rule C8) to eliminate click dead zones.
+- **Zero-GC Table Recycling**: Pre-allocated array buffers and native C++ `table.wipe` memory recycling (Rule D1 & B10) ensuring zero garbage collector spikes during intense PvP combat.
+- **Modular Architecture (Rule H7)**: Core engine logic (`BattlegroundTargets.lua`) cleanly separated from the configuration interface (`BattlegroundTargetsOpt.lua`).
 
 ---
 
@@ -42,11 +46,9 @@ To run this modernized build, the following client extensions are strictly requi
 
 | Command | Action |
 | :--- | :--- |
-| `/bgt` or `/bgtargets` | Toggle the BattlegroundTargets configuration interface immediately. |
-| `/bgt hdlog` | Toggle logging of healer detections in chat. |
-| `/bgt hdreport` | Print summary report of detected enemy healers and damage dealers. |
-| `/bgt hdlogAlways` | Toggle persistent healer logging mode while inside battlegrounds. |
-| `/bgt dbStoragePeriod <months>` | Get or set retention period for healer detection database. |
+| `/bgt` or `/battlegroundtargets` | Toggle the BattlegroundTargets configuration window. |
+| `/bgt test` | Toggle test mode to preview and position frames outside battlegrounds. |
+| `/bgt reset` | Reset all frame positions to default. |
 
 ---
 
@@ -56,14 +58,11 @@ To run this modernized build, the following client extensions are strictly requi
 BattlegroundTargets/
 ├── BattlegroundTargets.toc
 ├── Localization.lua
-├── DBUtils.lua
 ├── BattlegroundTargets.lua
+├── BattlegroundTargetsOpt.lua
 ├── Textures/
-│   ├── BattlegroundTargets-texture-button.tga
 │   ├── barTexture.tga
-│   ├── border.tga
-│   ├── ClassIcons/
-│   └── Focus.blp
+│   └── border.tga
 ├── LICENSE.txt
 └── README.md
 ```
@@ -87,13 +86,13 @@ BattlegroundTargets/
 
 - **Zero Combat Taint**: Completely bypasses retail protected frame restrictions.
 - **Zero Click Interception**: All decorative textures and overlay fontstrings have mouse events disabled.
-- **Zero Foreign Locale Bloat**: 9 redundant foreign locale scripts purged, reducing startup memory footprints.
+- **Zero Foreign Locale Bloat**: 100% pure English standard.
+- **Zero GC Churn**: Pre-allocated combat state buffers and native memory wipes.
 
 ---
 
 ## 📜 Credits & License
 
 - **Original Author**: kunda
-- **Combat Log & Healer Detection**: Nobraix, Jud, Khal
-- **1.12.1 Modernization & Engine Architecture**: Fostercare5988
+- **1.12.1 Enhanced Modernization & Engine Architecture**: Fostercare5988
 - **License**: GNU General Public License v2 (GPL-2.0)
