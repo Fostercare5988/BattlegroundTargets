@@ -32,6 +32,8 @@ To run this modernized build, the following client extensions are strictly requi
 - **Unrestricted Combat Targeting**: Unlike retail/Classic Era where targeting buttons are locked behind `SecureActionButtonTemplate` restrictions during combat, our SuperWoW integration provides instant exact-name targeting via `TargetByName(name, true)` at all times.
 - **Child Element Click Passthrough**: Explicit `:EnableMouse(false)` configured across all text labels, target indicators, assist markers, and class overlays (Rule C8) to eliminate click interception.
 - **Dynamic 10v10, 15v15 & 40v40 Layouts**: Automatically switches layout and scales depending on whether you are in Warsong Gulch, Arathi Basin, or Alterac Valley.
+- **Dedicated FosterFrames WSG Visual Theme (10v10)**: In Warsong Gulch, BattlegroundTargets adopts FosterFrames' sleek dark card styling—featuring smooth gradient statusbars (`barTexture.tga`), 8-slice dark borders (`border.tga`), 3px hairline power/mana bars, high-res flat class icons with cooldown spirals, and DXVK-synchronized `SmoothBar` animations.
+- **Compact Tactical Tabular View (15v15 & 40v40)**: In larger battlegrounds (Arathi Basin and Alterac Valley), BGT seamlessly maintains its classic ultra-compact tabular rows to preserve screen real estate.
 - **Dedicated Enemy Roster & Targeting Authority**: Focused enemy roster unit frames with real-time health, target counts, focus indicators, and healer detection. WSG flag carrier tracking has been cleanly offloaded to AutoBG for unified battlefield objective management.
 
 ---
@@ -40,7 +42,7 @@ To run this modernized build, the following client extensions are strictly requi
 
 | Command | Action |
 | :--- | :--- |
-| `/bgt` or `/bgtargets` | Toggle the BattlegroundTargets configuration interface. |
+| `/bgt` or `/bgtargets` | Toggle the BattlegroundTargets configuration interface immediately. |
 | `/bgt hdlog` | Toggle logging of healer detections in chat. |
 | `/bgt hdreport` | Print summary report of detected enemy healers and damage dealers. |
 | `/bgt hdlogAlways` | Toggle persistent healer logging mode while inside battlegrounds. |
@@ -56,10 +58,12 @@ BattlegroundTargets/
 ├── Localization.lua
 ├── DBUtils.lua
 ├── BattlegroundTargets.lua
-├── BattlegroundTargetsOpt.lua
 ├── Textures/
 │   ├── BattlegroundTargets-texture-button.tga
-│   └── Focus.tga
+│   ├── barTexture.tga
+│   ├── border.tga
+│   ├── ClassIcons/
+│   └── Focus.blp
 ├── LICENSE.txt
 └── README.md
 ```

@@ -9,4 +9,3 @@
 Localization.lua
 DBUtils.lua
 BattlegroundTargets.lua
-BattlegroundTargetsOpt.lua
