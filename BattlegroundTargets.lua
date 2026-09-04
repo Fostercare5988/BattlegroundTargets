@@ -139,6 +139,17 @@ BattlegroundTargets_HealersDB = {};
 BattlegroundTargets = CreateFrame("Frame", "BattlegroundTargets");
 _G["BattlegroundTargets"] = BattlegroundTargets;
 
+function Desaturation(texture, desaturate)
+	if not texture then return end
+	if texture.SetDesaturated then
+		texture:SetDesaturated(desaturate and 1 or 0);
+	elseif desaturate then
+		texture:SetVertexColor(0.5, 0.5, 0.5, 1);
+	else
+		texture:SetVertexColor(1, 1, 1, 1);
+	end
+end
+
 function BattlegroundTargets:EnsureGlobalTables()
 	if type(BattlegroundTargets_Options) ~= "table" then
 		BattlegroundTargets_Options = {};
@@ -154,6 +165,30 @@ function BattlegroundTargets:EnsureGlobalTables()
 		if faction then
 			BattlegroundTargets_Character.NativeFaction = faction;
 		end
+	end
+	if not BattlegroundTargets_Options.EnableBracket then
+		BattlegroundTargets_Options.EnableBracket = { [10] = true, [15] = true, [40] = true };
+	end
+	if not BattlegroundTargets_Options.IndependentPositioning then
+		BattlegroundTargets_Options.IndependentPositioning = { [10] = false, [15] = false, [40] = false };
+	end
+	if not BattlegroundTargets_Options.LayoutTH then
+		BattlegroundTargets_Options.LayoutTH = { [10] = 18, [15] = 18, [40] = 24 };
+	end
+	if not BattlegroundTargets_Options.LayoutSpace then
+		BattlegroundTargets_Options.LayoutSpace = { [10] = 0, [15] = 0, [40] = 0 };
+	end
+	if not BattlegroundTargets_Options.LayoutButtonSpace then
+		BattlegroundTargets_Options.LayoutButtonSpace = { [10] = 0, [15] = 0, [40] = 0 };
+	end
+	if not BattlegroundTargets_Options.ButtonShowHealer then
+		BattlegroundTargets_Options.ButtonShowHealer = { [10] = true, [15] = true, [40] = true };
+	end
+	if not BattlegroundTargets_Options.pos then
+		BattlegroundTargets_Options.pos = {};
+	end
+	if not BattlegroundTargets_Options.DB then
+		BattlegroundTargets_Options.DB = { outOfDateRange = 3 };
 	end
 end
 BattlegroundTargets:EnsureGlobalTables();
@@ -1769,7 +1804,11 @@ function BattlegroundTargets:InitOptions()
 		BattlegroundTargets_Options.version = 14
 	end
 
-	local _, instanceType = IsInInstance();
+	local instanceType = "";
+	if IsInInstance then
+		local _, it = IsInInstance();
+		instanceType = it or "";
+	end
 	if ( (BattlegroundTargets_Character.NativeFaction == nil or 
 		 BattlegroundTargets_Character.NativeFaction ~= UnitFactionGroup("player")) and instanceType ~= 'pvp') then
 		BattlegroundTargets_Character.NativeFaction = UnitFactionGroup("player");
@@ -2283,7 +2322,9 @@ function BattlegroundTargets:CreateInterfaceOptions()
 	GVAR.InterfaceOptions.SlashCommandText:SetPoint("LEFT", GVAR.InterfaceOptions.CONFIG, "RIGHT", 10, 0);
 	GVAR.InterfaceOptions.SlashCommandText:SetTextColor(1, 1, 0.49, 1);
 	
-	InterfaceOptions_AddCategory(GVAR.InterfaceOptions);
+	if InterfaceOptions_AddCategory then
+		InterfaceOptions_AddCategory(GVAR.InterfaceOptions);
+	end
 end
 
 function BattlegroundTargets:CreateOptionsFrame()
@@ -3413,7 +3454,13 @@ function BattlegroundTargets:CreateOptionsFrame()
 end
 
 function BattlegroundTargets:SetOptions()
-	GVAR.OptionsFrame.EnableBracket:SetChecked(BattlegroundTargets_Options.EnableBracket[currentSize]);
+	if not GVAR.OptionsFrame or not GVAR.OptionsFrame.EnableBracket then return end
+	BattlegroundTargets:EnsureGlobalTables();
+	local sz = currentSize or 10;
+	if not BattlegroundTargets_Options.EnableBracket[sz] then
+		BattlegroundTargets_Options.EnableBracket[sz] = true;
+	end
+	GVAR.OptionsFrame.EnableBracket:SetChecked(BattlegroundTargets_Options.EnableBracket[sz]);
 	GVAR.OptionsFrame.IndependentPos:SetChecked(BattlegroundTargets_Options.IndependentPositioning[currentSize]);
 
 	if(currentSize == 10) then
@@ -6568,12 +6615,20 @@ local function OnEvent(a1, a2, a3, a4, a5, a6, a7, a8, a9)
 
 	elseif event == "PLAYER_ENTERING_WORLD" then 
 		inWorld = true
+		BattlegroundTargets:EnsureGlobalTables()
 		BattlegroundTargets:CheckPlayerLevel()
 		BattlegroundTargets:BattlefieldCheck()
 		BattlegroundTargets:CheckIfPlayerIsGhost()
 		BattlegroundTargets:CreateMinimapButton()
 		if not BattlegroundTargets_Options.FirstRun then
-			BattlegroundTargets:Frame_Toggle(GVAR.OptionsFrame)
+			if not GVAR.OptionsFrame then
+				BattlegroundTargets:InitOptions()
+				BattlegroundTargets:CreateFrames()
+				BattlegroundTargets:CreateOptionsFrame()
+			end
+			if GVAR.OptionsFrame then
+				BattlegroundTargets:Frame_Toggle(GVAR.OptionsFrame)
+			end
 			BattlegroundTargets_Options.FirstRun = true
 		end
 		BattlegroundTargets:UnregisterEvent("PLAYER_ENTERING_WORLD");
