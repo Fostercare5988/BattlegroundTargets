@@ -1504,14 +1504,30 @@ end
 
 function BattlegroundTargets:InitOptions()
 
+	if type(BattlegroundTargets_Options) ~= "table" then
+		BattlegroundTargets_Options = {};
+	end
+	if type(BattlegroundTargets_Character) ~= "table" then
+		BattlegroundTargets_Character = {};
+	end
+	if type(BattlegroundTargets_HealersDB) ~= "table" then
+		BattlegroundTargets_HealersDB = {};
+	end
+	if type(OPT) ~= "table" then
+		OPT = {};
+	end
+
 	SLASH_BATTLEGROUNDTARGETS1 = "/bgt";
 	SLASH_BATTLEGROUNDTARGETS2 = "/bgtargets";
 	SLASH_BATTLEGROUNDTARGETS3 = "/battlegroundtargets";
 	
 	SlashCmdList["BATTLEGROUNDTARGETS"] = function(arg)
 
-		local text, id = arg:match("(%w+)%s?(%d*)")
-		local isShowHealersBtn = OPT.ButtonShowHealer[10] or OPT.ButtonShowHealer[15] or OPT.ButtonShowHealer[40];
+		local text, id
+		if arg and arg ~= "" then
+			text, id = arg:match("(%w+)%s?(%d*)")
+		end
+		local isShowHealersBtn = OPT.ButtonShowHealer and (OPT.ButtonShowHealer[10] or OPT.ButtonShowHealer[15] or OPT.ButtonShowHealer[40]);
 
 		if text and isShowHealersBtn then
 			if text == "help" then
