@@ -10,222 +10,198 @@ if not (CLASSIC_API_VERSION and SUPERWOW_VERSION) then
 	return
 end
 
-local addonName = "BattlegroundTargets"
-local MOD_VERSION = "3.0.0"
+local MOD_VERSION = "3.1.0"
+local MAX_ENEMIES = 40
+local BRACKETS = { 10, 15, 40 }
+local FONT = "Fonts\\FRIZQT__.TTF"
+local BAR_TEXTURE = [[Interface\AddOns\BattlegroundTargets\Textures\barTexture.tga]]
 
 BattlegroundTargets = CreateFrame("Frame", "BattlegroundTargets_CoreFrame", UIParent)
 local BGT = BattlegroundTargets
 BGT.Version = MOD_VERSION
-
-local L   = BattlegroundTargets_Localization or {}
-local BGN = BattlegroundTargets_BGNames or {}
-local RNA = BattlegroundTargets_RaceNames or {}
+BGT.currentSize = 10
+BGT.isConfig = false
 
 local playerName = UnitName("player")
-local _, playerClassEN = UnitClass("player")
-local playerFactionGroup = UnitFactionGroup("player")
-local playerFactionDEF = (playerFactionGroup == "Horde") and 0 or 1
-local oppositeFactionDEF = (playerFactionDEF == 0) and 1 or 0
-local playerFactionBG = playerFactionDEF
-local oppositeFactionBG = oppositeFactionDEF
-local factionIsValid = false
-
-local fontPath = "Fonts\\FRIZQT__.TTF"
-local ffBorderTexture = [[Interface\AddOns\BattlegroundTargets\Textures\border.tga]]
-local ffBarTexture    = [[Interface\AddOns\BattlegroundTargets\Textures\barTexture.tga]]
-
-local CLASS_COLORS = RAID_CLASS_COLORS or {
-	["WARRIOR"] = { r = 0.78, g = 0.61, b = 0.43 },
-	["MAGE"]    = { r = 0.41, g = 0.80, b = 0.94 },
-	["ROGUE"]   = { r = 1.00, g = 0.96, b = 0.41 },
-	["DRUID"]   = { r = 1.00, g = 0.49, b = 0.04 },
-	["HUNTER"]  = { r = 0.67, g = 0.83, b = 0.45 },
-	["SHAMAN"]  = { r = 0.00, g = 0.44, b = 0.87 },
-	["PRIEST"]  = { r = 1.00, g = 1.00, b = 1.00 },
-	["WARLOCK"] = { r = 0.58, g = 0.51, b = 0.79 },
-	["PALADIN"] = { r = 0.96, g = 0.55, b = 0.73 },
-}
-
-local CLASS_ORDER = {
-	["DRUID"]   = 1,
-	["HUNTER"]  = 2,
-	["MAGE"]    = 3,
-	["PALADIN"] = 4,
-	["PRIEST"]  = 5,
-	["ROGUE"]   = 6,
-	["SHAMAN"]  = 7,
-	["WARLOCK"] = 8,
-	["WARRIOR"] = 9,
-}
-
--- Pre-allocated data buffers (Rule D1: Zero Combat Heap Allocations)
-local ENEMY_Data = {}
-for i = 1, 40 do
-	ENEMY_Data[i] = { name = "", classToken = "", scoreIndex = 0 }
-end
-local ENEMY_Count = 0
-local ENEMY_NameToIndex = {}
-local ENEMY_NameToPercent = {}
-local ENEMY_NameToDead = {}
-
-local currentSize = 10
-BGT.currentSize = currentSize
-BGT.isConfig = false
-local inCombat = false
-local latestScoreUpdate = 0
-local scoreRequestThrottle = 0
+local playerFaction = UnitFactionGroup("player") == "Horde" and 0 or 1
+local enemyFaction = playerFaction == 0 and 1 or 0
 local activeBG = false
+local currentSize = 10
 
--- -------------------------------------------------------------------------- --
--- FosterFrames WSG Visual Theme Helpers (CreateBorder)                       --
--- -------------------------------------------------------------------------- --
-local ffDefaultTcut = 1 / 4.2
-local function ffGetTextCoords(tcutsize)
-	local sides = {
-		[1] = { 0, tcutsize, tcutsize, 1 - tcutsize },
-		[2] = { 1 - tcutsize, 1, tcutsize, 1 - tcutsize },
-		[3] = { tcutsize, 1 - tcutsize, 0, tcutsize },
-		[4] = { tcutsize, 1 - tcutsize, 1 - tcutsize, 1 },
-	}
-	local corners = {
-		[1] = { { 0, tcutsize, 0, tcutsize }, 'TOPLEFT' },
-		[2] = { { 1 - tcutsize, 1, 0, tcutsize }, 'TOPRIGHT' },
-		[3] = { { 0, tcutsize, 1 - tcutsize, 1 }, 'BOTTOMLEFT' },
-		[4] = { { 1 - tcutsize, 1, 1 - tcutsize, 1 }, 'BOTTOMRIGHT' },
-	}
-	return corners, sides
+local CLASS_COLORS = RAID_CLASS_COLORS
+local FALLBACK_COLOR = { r = 0.60, g = 0.60, b = 0.60 }
+local CLASS_ORDER = {
+	DRUID = 1,
+	HUNTER = 2,
+	MAGE = 3,
+	PALADIN = 4,
+	PRIEST = 5,
+	ROGUE = 6,
+	SHAMAN = 7,
+	WARLOCK = 8,
+	WARRIOR = 9,
+}
+
+-- Fixed-size roster storage (1..MAX_ENEMIES). Only 1..enemyCount is active.
+local roster = {}
+for i = 1, MAX_ENEMIES do
+	roster[i] = { name = nil, classToken = nil, guid = nil }
+end
+local enemyCount = 0
+
+-- Runtime lookup/telemetry caches
+local nameToRow = {}
+local nameToGUID = {}
+local shortNameToFull = {}
+local healthPct = {}
+local deadState = {}
+
+local wipe = table.wipe
+
+local function StripRealm(name)
+	local p = string.find(name, "-", 1, true)
+	if p then
+		return string.sub(name, 1, p - 1)
+	end
+	return name
 end
 
-local function CreateBorder(name, parent, size, tcut)
-	if not parent then return nil end
-	local parentFrame = parent
-	if not parent.GetFrameLevel and parent.GetParent then
-		parentFrame = parent:GetParent()
-	end
-	if not parentFrame or not parentFrame.CreateTexture then return nil end
-
-	local this = CreateFrame("Frame", name, parentFrame)
-	this:ClearAllPoints()
-	this:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
-	this:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 0)
-	local level = (parentFrame.GetFrameLevel and parentFrame:GetFrameLevel() or 1) + 1
-	this:SetFrameLevel(level)
-
-	local tcutsize = tcut or ffDefaultTcut
-	local corners, sides = ffGetTextCoords(tcutsize)
-
-	this.c = {}
-	for i = 1, 4 do
-		this.c[i] = this:CreateTexture(nil, "OVERLAY")
-		this.c[i]:SetHeight(size)
-		this.c[i]:SetWidth(size)
-		this.c[i]:SetTexture(ffBorderTexture)
-		this.c[i]:SetTexCoord(corners[i][1][1], corners[i][1][2], corners[i][1][3], corners[i][1][4])
-		local xo = (i == 1 or i == 3) and -1/8 or 1/8
-		local yo = (i == 1 or i == 2) and 1/8 or -1/8
-		this.c[i]:SetPoint(corners[i][2], this, xo * size, yo * size)
-	end
-
-	this.s = {}
-	for i = 1, 4 do
-		this.s[i] = this:CreateTexture(nil, "OVERLAY")
-		this.s[i]:SetTexture(ffBorderTexture)
-		this.s[i]:SetTexCoord(sides[i][1], sides[i][2], sides[i][3], sides[i][4])
-	end
-
-	this.s[1]:SetPoint("TOPLEFT", this.c[1], "BOTTOMLEFT")
-	this.s[1]:SetPoint("BOTTOMRIGHT", this.c[3], "TOPRIGHT")
-	this.s[2]:SetPoint("TOPLEFT", this.c[2], "BOTTOMLEFT")
-	this.s[2]:SetPoint("BOTTOMRIGHT", this.c[4], "TOPRIGHT")
-	this.s[3]:SetPoint("TOPLEFT", this.c[1], "TOPRIGHT")
-	this.s[3]:SetPoint("BOTTOMRIGHT", this.c[2], "BOTTOMLEFT")
-	this.s[4]:SetPoint("TOPLEFT", this.c[3], "TOPRIGHT")
-	this.s[4]:SetPoint("BOTTOMRIGHT", this.c[4], "BOTTOMLEFT")
-
-	return this
+local function GetClassColor(classToken)
+	return CLASS_COLORS[classToken] or FALLBACK_COLOR
 end
 
--- -------------------------------------------------------------------------- --
--- Options Initialization & Migration                                         --
--- -------------------------------------------------------------------------- --
-function BGT:EnsureGlobalTables()
+local function ClassThenNameSort(a, b)
+	local oa = CLASS_ORDER[a.classToken] or 99
+	local ob = CLASS_ORDER[b.classToken] or 99
+	if oa ~= ob then
+		return oa < ob
+	end
+	return a.name < b.name
+end
+
+local function NameSort(a, b)
+	return a.name < b.name
+end
+
+-- Allocation-free insertion sort strictly over the active segment (1..enemyCount)
+local function SortActiveRoster(comparator)
+	for i = 2, enemyCount do
+		local j = i
+		while j > 1 and comparator(roster[j], roster[j - 1]) do
+			roster[j], roster[j - 1] = roster[j - 1], roster[j]
+			j = j - 1
+		end
+	end
+end
+
+function BGT:EnsureOptions()
 	if type(BattlegroundTargets_Options) ~= "table" then
 		BattlegroundTargets_Options = {}
 	end
-	if type(BattlegroundTargets_Character) ~= "table" then
-		BattlegroundTargets_Character = {}
+
+	local o = BattlegroundTargets_Options
+	o.pos = o.pos or {}
+	o.EnableBracket = o.EnableBracket or {}
+	o.IndependentPositioning = o.IndependentPositioning or {}
+	o.ButtonFontSize = o.ButtonFontSize or {}
+	o.ButtonScale = o.ButtonScale or {}
+	o.ButtonWidth = o.ButtonWidth or {}
+	o.ButtonHeight = o.ButtonHeight or {}
+	o.ButtonShowHealthBar = o.ButtonShowHealthBar or {}
+	o.ButtonShowHealthText = o.ButtonShowHealthText or {}
+	o.ButtonHideRealm = o.ButtonHideRealm or {}
+	o.ButtonSortBy = o.ButtonSortBy or {}
+
+	for _, size in ipairs(BRACKETS) do
+		if o.EnableBracket[size] == nil then o.EnableBracket[size] = true end
+		if o.IndependentPositioning[size] == nil then o.IndependentPositioning[size] = false end
+		if o.ButtonFontSize[size] == nil then o.ButtonFontSize[size] = 10 end
+		if o.ButtonScale[size] == nil then o.ButtonScale[size] = size == 10 and 1.10 or (size == 15 and 1.00 or 0.90) end
+		if o.ButtonWidth[size] == nil then o.ButtonWidth[size] = 150 end
+		if o.ButtonHeight[size] == nil then o.ButtonHeight[size] = size == 40 and 18 or 20 end
+		if o.ButtonShowHealthBar[size] == nil then o.ButtonShowHealthBar[size] = true end
+		if o.ButtonShowHealthText[size] == nil then o.ButtonShowHealthText[size] = true end
+		if o.ButtonHideRealm[size] == nil then o.ButtonHideRealm[size] = false end
+		if o.ButtonSortBy[size] == nil then o.ButtonSortBy[size] = 1 end
 	end
 
-	local opt = BattlegroundTargets_Options
-	if not opt.pos then opt.pos = {} end
-	if not opt.EnableBracket then opt.EnableBracket = {} end
-	if not opt.IndependentPositioning then opt.IndependentPositioning = {} end
-	if not opt.ButtonFontSize then opt.ButtonFontSize = {} end
-	if not opt.ButtonScale then opt.ButtonScale = {} end
-	if not opt.ButtonWidth then opt.ButtonWidth = {} end
-	if not opt.ButtonHeight then opt.ButtonHeight = {} end
-	if not opt.ButtonShowHealthBar then opt.ButtonShowHealthBar = {} end
-	if not opt.ButtonShowHealthText then opt.ButtonShowHealthText = {} end
-	if not opt.ButtonHideRealm then opt.ButtonHideRealm = {} end
-	if not opt.ButtonSortBy then opt.ButtonSortBy = {} end
+	if o.MinimapButton == nil then o.MinimapButton = true end
+	if o.UseFosterThemeWSG == nil then o.UseFosterThemeWSG = true end
+end
+BGT:EnsureOptions()
 
-	local brackets = { 10, 15, 40 }
-	for _, b in ipairs(brackets) do
-		if opt.EnableBracket[b] == nil then opt.EnableBracket[b] = true end
-		if opt.IndependentPositioning[b] == nil then opt.IndependentPositioning[b] = false end
-		if opt.ButtonFontSize[b] == nil then opt.ButtonFontSize[b] = 10 end
-		if opt.ButtonScale[b] == nil then opt.ButtonScale[b] = (b == 10 and 1.1 or (b == 15 and 1.0 or 0.9)) end
-		if opt.ButtonWidth[b] == nil then opt.ButtonWidth[b] = 150 end
-		if opt.ButtonHeight[b] == nil then opt.ButtonHeight[b] = (b == 40 and 18 or 20) end
-		if opt.ButtonShowHealthBar[b] == nil then opt.ButtonShowHealthBar[b] = true end
-		if opt.ButtonShowHealthText[b] == nil then opt.ButtonShowHealthText[b] = true end
-		if opt.ButtonHideRealm[b] == nil then opt.ButtonHideRealm[b] = false end
-		if opt.ButtonSortBy[b] == nil then opt.ButtonSortBy[b] = 1 end
-	end
+local function CreateLine(parent, layer)
+	local t = parent:CreateTexture(nil, layer or "OVERLAY")
+	t:SetTexture(1, 1, 1, 1)
+	return t
+end
 
-	if opt.MinimapButton == nil then opt.MinimapButton = true end
-	if opt.UseFosterThemeWSG == nil then opt.UseFosterThemeWSG = true end
+local function SetBorderColor(btn, r, g, b, a)
+	btn.BorderTop:SetTexture(r, g, b, a)
+	btn.BorderBottom:SetTexture(r, g, b, a)
+	btn.BorderLeft:SetTexture(r, g, b, a)
+	btn.BorderRight:SetTexture(r, g, b, a)
+end
 
-	if not BattlegroundTargets_Character.NativeFaction then
-		BattlegroundTargets_Character.NativeFaction = playerFactionGroup or "Horde"
+local function UpdateRowSelectionVisual(btn)
+	if not btn.targetName then return end
+
+	local targetName = UnitExists("target") and UnitName("target") or nil
+	local focusName = UnitExists("focus") and UnitName("focus") or nil
+
+	if targetName == btn.targetName then
+		SetBorderColor(btn, 1.0, 0.82, 0.20, 1.0)
+		btn.Selection:Show()
+	elseif focusName == btn.targetName then
+		SetBorderColor(btn, 0.35, 0.75, 1.0, 1.0)
+		btn.Selection:Show()
+	else
+		-- Reset border back to neutral dark to prevent sticky target borders
+		SetBorderColor(btn, 0, 0, 0, 0.80)
+		btn.Selection:Hide()
 	end
 end
-BGT:EnsureGlobalTables()
 
--- -------------------------------------------------------------------------- --
--- Frame Creation: Main Drag Handle & 40 Enemy Buttons                        --
--- -------------------------------------------------------------------------- --
+local function UpdateAllSelectionVisuals()
+	if not BGT.TargetButton then return end
+	for i = 1, currentSize do
+		local btn = BGT.TargetButton[i]
+		if btn:IsShown() then
+			UpdateRowSelectionVisual(btn)
+		end
+	end
+end
+
 function BGT:CreateFrames()
 	if BGT.MainFrame then return end
 
-	-- Main Container / Move Handle
-	local mainFrame = CreateFrame("Frame", "BattlegroundTargets_MainFrame", UIParent)
-	BGT.MainFrame = mainFrame
-	mainFrame:SetWidth(150)
-	mainFrame:SetHeight(20)
-	mainFrame:SetMovable(true)
-	mainFrame:SetResizable(true)
-	mainFrame:SetClampedToScreen(true)
-	mainFrame:EnableMouse(true)
-	mainFrame:Hide()
+	local main = CreateFrame("Frame", "BattlegroundTargets_MainFrame", UIParent)
+	BGT.MainFrame = main
+	main:SetWidth(150)
+	main:SetHeight(20)
+	main:SetMovable(true)
+	main:SetClampedToScreen(true)
+	main:EnableMouse(BGT.isConfig and true or false)
+	main:Hide()
 
-	mainFrame:SetScript("OnMouseDown", function()
-		mainFrame:StartMoving()
+	main:SetScript("OnMouseDown", function()
+		if BGT.isConfig then
+			this:StartMoving()
+		end
 	end)
-	mainFrame:SetScript("OnMouseUp", function()
-		mainFrame:StopMovingOrSizing()
+	main:SetScript("OnMouseUp", function()
+		this:StopMovingOrSizing()
 		BGT:Frame_SavePosition("BattlegroundTargets_MainFrame")
 	end)
 
-	mainFrame.MoveText = mainFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-	mainFrame.MoveText:SetPoint("CENTER", 0, 0)
-	mainFrame.MoveText:SetText(L["click & move"] or "click & move")
-	mainFrame.MoveText:SetTextColor(0.8, 0.8, 0.8, 1)
+	main.MoveText = main:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+	main.MoveText:SetPoint("CENTER", main, "CENTER", 0, 0)
+	main.MoveText:SetText("click & move")
+	main.MoveText:SetTextColor(0.8, 0.8, 0.8, 1)
 
-	-- 40 Target Buttons
 	BGT.TargetButton = {}
-	for i = 1, 40 do
-		local btn = CreateFrame("Button", "BattlegroundTargets_TargetButton" .. i, UIParent)
+	for i = 1, MAX_ENEMIES do
+		local btn = CreateFrame("Button", "BattlegroundTargets_TargetButton" .. i, main)
 		BGT.TargetButton[i] = btn
 		btn.buttonNum = i
 		btn:SetWidth(150)
@@ -233,91 +209,102 @@ function BGT:CreateFrames()
 		btn:Hide()
 
 		if i == 1 then
-			btn:SetPoint("TOPLEFT", mainFrame, "BOTTOMLEFT", 0, 0)
+			btn:SetPoint("TOPLEFT", main, "BOTTOMLEFT", 0, 0)
 		else
 			btn:SetPoint("TOPLEFT", BGT.TargetButton[i - 1], "BOTTOMLEFT", 0, 0)
 		end
 
-		-- Background (dark translucent backplate)
 		btn.Background = btn:CreateTexture(nil, "BACKGROUND")
-		btn.Background:SetPoint("TOPLEFT", 1, -1)
-		btn.Background:SetWidth(148)
-		btn.Background:SetHeight(18)
-		btn.Background:SetTexture(0, 0, 0, 0.45)
+		btn.Background:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
+		btn.Background:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+		btn.Background:SetTexture(0, 0, 0, 0.58)
 
-		-- Class Color Darker Background (tinted backing)
-		btn.ClassColorBackground = btn:CreateTexture(nil, "BORDER")
-		btn.ClassColorBackground:SetPoint("LEFT", btn, "LEFT", 1, 0)
-		btn.ClassColorBackground:SetWidth(148)
-		btn.ClassColorBackground:SetHeight(18)
-		btn.ClassColorBackground:SetTexture(0, 0, 0, 0)
+		btn.ClassBackground = btn:CreateTexture(nil, "BORDER")
+		btn.ClassBackground:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
+		btn.ClassBackground:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+		btn.ClassBackground:SetTexture(0, 0, 0, 1)
 
-		-- Health Bar (bright class colored foreground bar)
 		btn.HealthBar = btn:CreateTexture(nil, "ARTWORK")
-		btn.HealthBar:SetPoint("LEFT", btn.ClassColorBackground, "LEFT", 0, 0)
+		btn.HealthBar:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
+		btn.HealthBar:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 1, 1)
 		btn.HealthBar:SetWidth(148)
-		btn.HealthBar:SetHeight(18)
-		btn.HealthBar:SetTexture(0, 0, 0, 0)
 
-		-- Health Text (Right-aligned FontString) - Rule C8: mouse passthrough
+		btn.Selection = btn:CreateTexture(nil, "ARTWORK")
+		btn.Selection:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
+		btn.Selection:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+		btn.Selection:SetTexture(1, 1, 1, 0.08)
+		btn.Selection:Hide()
+
+		btn.Name = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+		btn.Name:SetPoint("LEFT", btn, "LEFT", 4, 0)
+		btn.Name:SetJustifyH("LEFT")
+		btn.Name:SetFont(FONT, 10, "")
+		btn.Name:SetTextColor(1, 1, 1, 1)
+
 		btn.HealthText = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 		btn.HealthText:SetPoint("RIGHT", btn, "RIGHT", -4, 0)
 		btn.HealthText:SetJustifyH("RIGHT")
-		btn.HealthText:SetFont(fontPath, 10, "OUTLINE")
-		btn.HealthText:SetTextColor(1, 1, 1, 0.8)
+		btn.HealthText:SetFont(FONT, 10, "OUTLINE")
+		btn.HealthText:SetTextColor(1, 1, 1, 0.90)
 
-		-- Player Name (Left-aligned FontString) - Rule C8: mouse passthrough
-		btn.Name = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-		btn.Name:SetPoint("LEFT", btn.ClassColorBackground, "LEFT", 4, 0)
 		btn.Name:SetPoint("RIGHT", btn.HealthText, "LEFT", -4, 0)
-		btn.Name:SetJustifyH("LEFT")
-		btn.Name:SetFont(fontPath, 10, "")
-		btn.Name:SetTextColor(1, 1, 1, 1)
 
-		-- Highlight Borders (1px border lines)
-		btn.HighlightT = btn:CreateTexture(nil, "HIGHLIGHT")
-		btn.HighlightT:SetPoint("TOP", 0, 0)
-		btn.HighlightT:SetHeight(1)
-		btn.HighlightT:SetWidth(150)
-		btn.HighlightT:SetTexture(1, 1, 0.5, 0.8)
+		btn.BorderTop = CreateLine(btn, "OVERLAY")
+		btn.BorderTop:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0)
+		btn.BorderTop:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 0, 0)
+		btn.BorderTop:SetHeight(1)
 
-		btn.HighlightB = btn:CreateTexture(nil, "HIGHLIGHT")
-		btn.HighlightB:SetPoint("BOTTOM", 0, 0)
-		btn.HighlightB:SetHeight(1)
-		btn.HighlightB:SetWidth(150)
-		btn.HighlightB:SetTexture(1, 1, 0.5, 0.8)
+		btn.BorderBottom = CreateLine(btn, "OVERLAY")
+		btn.BorderBottom:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
+		btn.BorderBottom:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
+		btn.BorderBottom:SetHeight(1)
 
-		btn.HighlightL = btn:CreateTexture(nil, "HIGHLIGHT")
-		btn.HighlightL:SetPoint("LEFT", 0, 0)
-		btn.HighlightL:SetWidth(1)
-		btn.HighlightL:SetHeight(20)
-		btn.HighlightL:SetTexture(1, 1, 0.5, 0.8)
+		btn.BorderLeft = CreateLine(btn, "OVERLAY")
+		btn.BorderLeft:SetPoint("TOPLEFT", btn, "TOPLEFT", 0, 0)
+		btn.BorderLeft:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", 0, 0)
+		btn.BorderLeft:SetWidth(1)
 
-		btn.HighlightR = btn:CreateTexture(nil, "HIGHLIGHT")
-		btn.HighlightR:SetPoint("RIGHT", 0, 0)
-		btn.HighlightR:SetWidth(1)
-		btn.HighlightR:SetHeight(20)
-		btn.HighlightR:SetTexture(1, 1, 0.5, 0.8)
+		btn.BorderRight = CreateLine(btn, "OVERLAY")
+		btn.BorderRight:SetPoint("TOPRIGHT", btn, "TOPRIGHT", 0, 0)
+		btn.BorderRight:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", 0, 0)
+		btn.BorderRight:SetWidth(1)
 
-		-- FosterFrames WSG Visual Theme Elements
-		btn.ffBorder = CreateBorder(nil, btn, 10, 1 / 5)
-		if btn.ffBorder then btn.ffBorder:Hide() end
+		SetBorderColor(btn, 0, 0, 0, 0.80)
 
-		-- Rule C5: Explicit Right-Click Registration
+		btn:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
 		btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 
-		-- Instant Exact-Name Targeting via SuperWoW (works in/out of combat)
 		btn:SetScript("OnClick", function()
-			local targetName = this.targetName
-			if not targetName or targetName == "" then return end
+			local name = this.targetName
+			if not name then return end
+
+			local guid = this.targetGUID or nameToGUID[name]
 			if arg1 == "LeftButton" then
-				TargetByName(targetName, true)
-			elseif arg1 == "RightButton" then
-				TargetByName(targetName, true)
-				if FocusUnit then
-					FocusUnit("target")
+				if guid then
+					TargetUnit(guid)
+				else
+					TargetByName(name, true)
 				end
-				TargetLastTarget()
+			elseif arg1 == "RightButton" then
+				local isCurrentTarget = UnitExists("target") and (UnitName("target") == name)
+				if isCurrentTarget then
+					FocusUnit("target")
+				else
+					local hadPriorTarget = UnitExists("target")
+					if guid then
+						TargetUnit(guid)
+					else
+						TargetByName(name, true)
+					end
+					if UnitExists("target") and UnitName("target") == name then
+						FocusUnit("target")
+					end
+					if hadPriorTarget then
+						TargetLastTarget()
+					else
+						ClearTarget()
+					end
+				end
 			end
 		end)
 	end
@@ -325,532 +312,385 @@ function BGT:CreateFrames()
 	BGT:Frame_SetupPosition("BattlegroundTargets_MainFrame")
 end
 
--- -------------------------------------------------------------------------- --
--- Position Persistence & Setup                                               --
--- -------------------------------------------------------------------------- --
 function BGT:Frame_SetupPosition(frameName)
-	local f = _G[frameName]
-	if not f then return end
-	local opt = BattlegroundTargets_Options
-	local sz = currentSize or 10
+	local frame = _G[frameName]
+	if not frame then return end
 
-	if frameName == "BattlegroundTargets_MainFrame" then
-		if opt.IndependentPositioning[sz] and opt.pos[frameName .. sz .. "_posX"] then
-			f:ClearAllPoints()
-			f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", opt.pos[frameName .. sz .. "_posX"], opt.pos[frameName .. sz .. "_posY"])
-		elseif opt.pos[frameName .. "_posX"] then
-			f:ClearAllPoints()
-			f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", opt.pos[frameName .. "_posX"], opt.pos[frameName .. "_posY"])
-		else
-			f:ClearAllPoints()
-			f:SetPoint("CENTER", UIParent, "CENTER", 300, 50)
-		end
-	elseif frameName == "BattlegroundTargets_OptionsFrame" then
-		if opt.pos[frameName .. "_posX"] then
-			f:ClearAllPoints()
-			f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", opt.pos[frameName .. "_posX"], opt.pos[frameName .. "_posY"])
-		else
-			f:ClearAllPoints()
-			f:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
-		end
+	local o = BattlegroundTargets_Options
+	local size = currentSize
+	local keyPrefix = frameName
+	if frameName == "BattlegroundTargets_MainFrame" and o.IndependentPositioning[size] then
+		keyPrefix = frameName .. size
+	end
+
+	local x = o.pos[keyPrefix .. "_posX"]
+	local y = o.pos[keyPrefix .. "_posY"]
+	frame:ClearAllPoints()
+	if x and y then
+		frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+	elseif frameName == "BattlegroundTargets_MainFrame" then
+		frame:SetPoint("CENTER", UIParent, "CENTER", 300, 50)
+	else
+		frame:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
 	end
 end
 
 function BGT:Frame_SavePosition(frameName)
-	local f = _G[frameName]
-	if not f then return end
-	local opt = BattlegroundTargets_Options
-	local sz = currentSize or 10
-	local keyX, keyY
+	local frame = _G[frameName]
+	if not frame then return end
 
-	if frameName == "BattlegroundTargets_MainFrame" and opt.IndependentPositioning[sz] then
-		keyX = frameName .. sz .. "_posX"
-		keyY = frameName .. sz .. "_posY"
-	else
-		keyX = frameName .. "_posX"
-		keyY = frameName .. "_posY"
+	local o = BattlegroundTargets_Options
+	local keyPrefix = frameName
+	if frameName == "BattlegroundTargets_MainFrame" and o.IndependentPositioning[currentSize] then
+		keyPrefix = frameName .. currentSize
 	end
 
-	opt.pos[keyX] = f:GetLeft()
-	opt.pos[keyY] = f:GetTop()
-	f:ClearAllPoints()
-	f:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", opt.pos[keyX], opt.pos[keyY])
+	o.pos[keyPrefix .. "_posX"] = frame:GetLeft()
+	o.pos[keyPrefix .. "_posY"] = frame:GetTop()
+	frame:ClearAllPoints()
+	frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", o.pos[keyPrefix .. "_posX"], o.pos[keyPrefix .. "_posY"])
 end
 
--- -------------------------------------------------------------------------- --
--- Layout Application for Current Bracket (10, 15, or 40)                     --
--- -------------------------------------------------------------------------- --
-function BGT:SetupButtonLayout(bracketSize)
-	local sz = bracketSize or currentSize or 10
-	currentSize = sz
-	BGT.currentSize = sz
+function BGT:SetupButtonLayout(size)
+	size = size or currentSize
+	currentSize = size
+	BGT.currentSize = size
 
 	if not BGT.TargetButton then
 		BGT:CreateFrames()
 	end
 
-	local opt = BattlegroundTargets_Options
-	local btnWidth  = opt.ButtonWidth[sz] or 150
-	local btnHeight = opt.ButtonHeight[sz] or 20
-	local btnScale  = opt.ButtonScale[sz] or 1.0
-	local fontSize  = opt.ButtonFontSize[sz] or 10
-	local isWSG     = (sz == 10)
-	local useFoster = isWSG and (opt.UseFosterThemeWSG ~= false)
+	local o = BattlegroundTargets_Options
+	local width = o.ButtonWidth[size]
+	local height = o.ButtonHeight[size]
+	local fontSize = o.ButtonFontSize[size]
+	local scale = o.ButtonScale[size]
+	local useTexture = size == 10 and o.UseFosterThemeWSG
 
-	BGT.MainFrame:SetWidth(btnWidth)
-	BGT.MainFrame:SetScale(btnScale)
+	BGT.MainFrame:SetWidth(width)
+	BGT.MainFrame:SetScale(scale)
+	BGT.MainFrame:EnableMouse(BGT.isConfig and true or false)
 
-	local btnWidth_2  = btnWidth - 2
-	local btnHeight_2 = btnHeight - 2
-
-	for i = 1, 40 do
+	for i = 1, MAX_ENEMIES do
 		local btn = BGT.TargetButton[i]
-		btn:SetScale(btnScale)
-		btn:SetWidth(btnWidth)
-		btn:SetHeight(btnHeight)
-
-		btn.Background:SetWidth(btnWidth_2)
-		btn.Background:SetHeight(btnHeight_2)
-		btn.ClassColorBackground:SetWidth(btnWidth_2)
-		btn.ClassColorBackground:SetHeight(btnHeight_2)
-		btn.HealthBar:SetHeight(btnHeight_2)
-
-		btn.HighlightT:SetWidth(btnWidth)
-		btn.HighlightB:SetWidth(btnWidth)
-		btn.HighlightL:SetHeight(btnHeight)
-		btn.HighlightR:SetHeight(btnHeight)
-
-		btn.Name:SetFont(fontPath, fontSize, "")
-		btn.HealthText:SetFont(fontPath, fontSize, "OUTLINE")
-
-		if useFoster then
-			if btn.ffBorder then btn.ffBorder:Show() end
-			btn.HealthBar:SetTexture(ffBarTexture)
-			btn.Background:SetTexture(0, 0, 0, 0.65)
+		btn:SetWidth(width)
+		btn:SetHeight(height)
+		btn.Name:SetFont(FONT, fontSize, "")
+		btn.HealthText:SetFont(FONT, fontSize, "OUTLINE")
+		if useTexture then
+			btn.HealthBar:SetTexture(BAR_TEXTURE)
 		else
-			if btn.ffBorder then btn.ffBorder:Hide() end
-			btn.Background:SetTexture(0, 0, 0, 0.45)
+			btn.HealthBar:SetTexture(1, 1, 1, 1)
 		end
 	end
 
 	BGT:Frame_SetupPosition("BattlegroundTargets_MainFrame")
 end
 
--- -------------------------------------------------------------------------- --
--- Enemy Roster Processing (UPDATE_BATTLEFIELD_SCORE)                         --
--- -------------------------------------------------------------------------- --
-local function ClassThenNameSort(a, b)
-	if not a or not b then return false end
-	local orderA = CLASS_ORDER[a.classToken] or 99
-	local orderB = CLASS_ORDER[b.classToken] or 99
-	if orderA ~= orderB then
-		return orderA < orderB
+local function GetBracketSize(bgName)
+	if not bgName then return currentSize end
+	if string.find(bgName, "Warsong") or string.find(bgName, "Kriegshymnen") or string.find(bgName, "Goulet") then
+		return 10
+	elseif string.find(bgName, "Arathi") or string.find(bgName, "Eye") or string.find(bgName, "Auge") or string.find(bgName, "Oeil") then
+		return 15
+	elseif string.find(bgName, "Alterac") then
+		return 40
 	end
-	return (a.name or "") < (b.name or "")
+	return currentSize
 end
 
-local function NameOnlySort(a, b)
-	if not a or not b then return false end
-	return (a.name or "") < (b.name or "")
-end
-
-function BGT:BattlefieldScoreUpdate()
-	local now = GetTime()
-	if (now - latestScoreUpdate) < 1.0 then return end
-	latestScoreUpdate = now
-
-	-- Detect active battleground
-	local inBG = false
-	local bgName = nil
-	for i = 1, MAX_BATTLEFIELD_QUEUES do
+local function DetectBattleground()
+	local maxQueues = MAX_BATTLEFIELD_QUEUES or 3
+	for i = 1, maxQueues do
 		local status, mapName = GetBattlefieldStatus(i)
 		if status == "active" then
-			inBG = true
-			bgName = BGN[mapName] or mapName
-			break
+			return true, mapName
 		end
 	end
+	return false, nil
+end
 
-	if not inBG and not BGT.isConfig then
+local function RenderHealthForRow(index, name)
+	local btn = BGT.TargetButton[index]
+	local o = BattlegroundTargets_Options
+	local pct = healthPct[name] or 100
+	local dead = deadState[name]
+	local maxWidth = o.ButtonWidth[currentSize] - 2
+
+	if o.ButtonShowHealthBar[currentSize] then
+		btn.HealthBar:SetWidth(math.max(0.01, maxWidth * pct / 100))
+		btn.HealthBar:Show()
+	else
+		btn.HealthBar:Hide()
+	end
+
+	if o.ButtonShowHealthText[currentSize] then
+		btn.HealthText:SetText(dead and "|cffff4040DEAD|r" or (pct .. "%"))
+		btn.HealthText:Show()
+	else
+		btn.HealthText:Hide()
+	end
+
+	btn:SetAlpha(dead and 0.55 or 1.0)
+end
+
+local function RenderRoster()
+	local o = BattlegroundTargets_Options
+	if not o.EnableBracket[currentSize] and not BGT.isConfig then
 		BGT.MainFrame:Hide()
-		for i = 1, 40 do
-			BGT.TargetButton[i]:Hide()
-		end
-		activeBG = false
 		return
 	end
-	activeBG = true
 
-	-- Determine bracket size from BG name
-	local sz = 10
-	if bgName == "Warsong Gulch" then
-		sz = 10
-	elseif bgName == "Arathi Basin" or bgName == "Eye of the Storm" then
-		sz = 15
-	elseif bgName == "Alterac Valley" then
-		sz = 40
-	else
-		sz = currentSize or 10
-	end
+	wipe(nameToRow)
+	wipe(shortNameToFull)
 
-	if sz ~= currentSize then
-		currentSize = sz
-		BGT.currentSize = sz
-		BGT:SetupButtonLayout(sz)
-	end
-
-	-- Check player faction from scoreboard (Mercenary mode support)
-	local numScores = GetNumBattlefieldScores()
-	for i = 1, numScores do
-		local name, _, _, _, _, faction = GetBattlefieldScore(i)
-		if name == playerName then
-			playerFactionBG = faction
-			oppositeFactionBG = (faction == 0) and 1 or 0
-			factionIsValid = true
-			break
+	local displayCount = math.min(enemyCount, currentSize)
+	for i = 1, displayCount do
+		local fullName = roster[i].name
+		local shortName = StripRealm(fullName)
+		if shortNameToFull[shortName] == nil then
+			shortNameToFull[shortName] = fullName
+		elseif shortNameToFull[shortName] ~= fullName then
+			shortNameToFull[shortName] = false
 		end
 	end
-
-	-- Extract enemy roster
-	table.wipe(ENEMY_NameToIndex)
-	ENEMY_Count = 0
-
-	for i = 1, numScores do
-		local name, _, _, _, _, faction, _, _, _, classToken = GetBattlefieldScore(i)
-		if name and name ~= playerName and faction == oppositeFactionBG then
-			ENEMY_Count = ENEMY_Count + 1
-			if ENEMY_Count <= 40 then
-				local entry = ENEMY_Data[ENEMY_Count]
-				entry.name = name
-				entry.classToken = classToken or "WARRIOR"
-				entry.scoreIndex = i
-			end
-		end
-	end
-
-	-- Cap to currentSize
-	local displayCount = math.min(ENEMY_Count, currentSize)
-
-	-- Sort
-	local sortMode = BattlegroundTargets_Options.ButtonSortBy[currentSize] or 1
-	if sortMode == 2 then
-		table.sort(ENEMY_Data, NameOnlySort)
-	else
-		table.sort(ENEMY_Data, ClassThenNameSort)
-	end
-
-	-- Render buttons
-	local opt = BattlegroundTargets_Options
-	local hideRealm = opt.ButtonHideRealm[currentSize]
-	local showHealthBar = opt.ButtonShowHealthBar[currentSize]
-	local showHealthText = opt.ButtonShowHealthText[currentSize]
-	local maxBarWidth = (opt.ButtonWidth[currentSize] or 150) - 2
 
 	for i = 1, currentSize do
 		local btn = BGT.TargetButton[i]
 		if i <= displayCount then
-			local data = ENEMY_Data[i]
-			local eName = data.name
-			local cToken = data.classToken
-			btn.targetName = eName
-			btn.classToken = cToken
-			ENEMY_NameToIndex[eName] = i
+			local data = roster[i]
+			local color = GetClassColor(data.classToken)
+			local name = data.name
 
-			-- Class Colors
-			local col = CLASS_COLORS[cToken] or { r = 0.6, g = 0.6, b = 0.6 }
-			local colR, colG, colB = col.r, col.g, col.b
-			btn.ClassColorBackground:SetTexture(colR * 0.35, colG * 0.35, colB * 0.35, 1)
-			if not (currentSize == 10 and opt.UseFosterThemeWSG) then
-				btn.HealthBar:SetTexture(colR, colG, colB, 1)
-			else
-				btn.HealthBar:SetVertexColor(colR, colG, colB, 1)
-			end
+			btn.targetName = name
+			btn.targetGUID = nameToGUID[name]
+			btn.classToken = data.classToken
+			nameToRow[name] = i
 
-			-- Display Name (strip realm if hideRealm)
-			local displayName = eName
-			if hideRealm then
-				local dashIdx = string.find(eName, "-", 1, true)
-				if dashIdx then
-					displayName = string.sub(eName, 1, dashIdx - 1)
-				end
-			end
-			btn.Name:SetText(displayName)
+			btn.ClassBackground:SetTexture(color.r * 0.30, color.g * 0.30, color.b * 0.30, 1)
+			btn.HealthBar:SetVertexColor(color.r, color.g, color.b, 1)
 
-			-- Health Telemetry
-			local pct = ENEMY_NameToPercent[eName] or 100
-			local isDead = ENEMY_NameToDead[eName]
-
-			if showHealthBar then
-				local barWidth = math.max(0.01, math.min(maxBarWidth, maxBarWidth * (pct / 100)))
-				btn.HealthBar:SetWidth(barWidth)
-				btn.HealthBar:Show()
-			else
-				btn.HealthBar:Hide()
-			end
-
-			if showHealthText then
-				if isDead or pct <= 0 then
-					btn.HealthText:SetText("|cffff2020DEAD|r")
-					btn:SetAlpha(0.6)
-				else
-					btn.HealthText:SetText(pct .. "%")
-					btn:SetAlpha(1.0)
-				end
-				btn.HealthText:Show()
-			else
-				btn.HealthText:Hide()
-				btn:SetAlpha(isDead and 0.6 or 1.0)
-			end
-
+			btn.Name:SetText(o.ButtonHideRealm[currentSize] and StripRealm(name) or name)
+			RenderHealthForRow(i, name)
+			UpdateRowSelectionVisual(btn)
 			btn:Show()
 		else
 			btn.targetName = nil
+			btn.targetGUID = nil
 			btn:Hide()
 		end
 	end
 
-	-- Show MainFrame if enabled
-	if opt.EnableBracket[currentSize] and not BGT.isConfig then
-		BGT.MainFrame:Show()
-		BGT.MainFrame.MoveText:Hide()
+	BGT.MainFrame:Show()
+	BGT.MainFrame:EnableMouse(BGT.isConfig and true or false)
+	BGT.MainFrame.MoveText:SetShown(BGT.isConfig and true or false)
+end
+BGT.RenderRoster = RenderRoster
+
+function BGT:BattlefieldScoreUpdate()
+	if BGT.isConfig then return end
+
+	local inBG, bgName = DetectBattleground()
+	if not inBG then
+		activeBG = false
+		BGT.MainFrame:Hide()
+		return
 	end
+	activeBG = true
+
+	local size = GetBracketSize(bgName)
+	if size ~= currentSize then
+		BGT:SetupButtonLayout(size)
+	end
+
+	local numScores = GetNumBattlefieldScores()
+	for i = 1, numScores do
+		local name, _, _, _, _, faction = GetBattlefieldScore(i)
+		if name == playerName then
+			enemyFaction = faction == 0 and 1 or 0
+			break
+		end
+	end
+
+	enemyCount = 0
+	for i = 1, numScores do
+		local name, _, _, _, _, faction, _, _, _, classToken = GetBattlefieldScore(i)
+		if name and name ~= playerName and faction == enemyFaction and enemyCount < MAX_ENEMIES then
+			enemyCount = enemyCount + 1
+			local e = roster[enemyCount]
+			e.name = name
+			e.classToken = classToken or "WARRIOR"
+			e.guid = nameToGUID[name]
+		end
+	end
+
+	for i = enemyCount + 1, MAX_ENEMIES do
+		local e = roster[i]
+		e.name = nil
+		e.classToken = nil
+		e.guid = nil
+	end
+
+	if BattlegroundTargets_Options.ButtonSortBy[currentSize] == 2 then
+		SortActiveRoster(NameSort)
+	else
+		SortActiveRoster(ClassThenNameSort)
+	end
+
+	RenderRoster()
 end
 
--- -------------------------------------------------------------------------- --
--- Real-Time Health Telemetry Mapper                                          --
--- -------------------------------------------------------------------------- --
-function BGT:UpdateUnitHealth(unit)
+local function ObserveUnit(unit)
 	if not unit or not UnitExists(unit) then return end
-	local name = UnitName(unit)
+	local observedName = UnitName(unit)
+	if not observedName then return end
+	local name = nameToRow[observedName] and observedName or shortNameToFull[StripRealm(observedName)]
 	if not name then return end
 
-	local idx = ENEMY_NameToIndex[name]
-	if not idx then return end
-
-	local btn = BGT.TargetButton[idx]
-	if not btn or not btn:IsShown() then return end
-
-	-- Query Health
-	local curHp = UnitHealth(unit)
-	local maxHp = UnitHealthMax(unit)
-	local isDead = UnitIsDead(unit) or UnitIsGhost(unit) or (curHp <= 0)
-
-	local pct = 100
-	if maxHp and maxHp > 0 then
-		pct = math.floor((curHp / maxHp) * 100)
-	end
-	if isDead then pct = 0 end
-
-	ENEMY_NameToPercent[name] = pct
-	ENEMY_NameToDead[name] = isDead
-
-	local opt = BattlegroundTargets_Options
-	local showHealthBar = opt.ButtonShowHealthBar[currentSize]
-	local showHealthText = opt.ButtonShowHealthText[currentSize]
-	local maxBarWidth = (opt.ButtonWidth[currentSize] or 150) - 2
-
-	if showHealthBar then
-		local barWidth = math.max(0.01, math.min(maxBarWidth, maxBarWidth * (pct / 100)))
-		btn.HealthBar:SetWidth(barWidth)
-	end
-
-	if showHealthText then
-		if isDead then
-			btn.HealthText:SetText("|cffff2020DEAD|r")
-			btn:SetAlpha(0.6)
-		else
-			btn.HealthText:SetText(pct .. "%")
-			btn:SetAlpha(1.0)
+	local guid = UnitGUID(unit)
+	if guid then
+		nameToGUID[name] = guid
+		local row = nameToRow[name]
+		if row then
+			BGT.TargetButton[row].targetGUID = guid
 		end
-	else
-		btn:SetAlpha(isDead and 0.6 or 1.0)
 	end
+
+	local row = nameToRow[name]
+	if not row then return end
+
+	local hp, hpMax
+	if UnitXP then
+		local ok1, cur = pcall(UnitXP, "health", unit)
+		local ok2, maxh = pcall(UnitXP, "maxhealth", unit)
+		if ok1 and ok2 and cur and maxh and maxh > 0 then
+			hp, hpMax = cur, maxh
+		end
+	end
+	if not hp then
+		hp = UnitHealth(unit)
+		hpMax = UnitHealthMax(unit)
+	end
+
+	local dead = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit) or (UnitIsDead(unit) or UnitIsGhost(unit))
+	local pct = 100
+	if hpMax and hpMax > 0 then
+		pct = math.floor((hp / hpMax) * 100 + 0.5)
+	end
+	if dead or (hp and hp <= 0) then pct = 0 end
+
+	if healthPct[name] == pct and deadState[name] == dead then return end
+	healthPct[name] = pct
+	deadState[name] = dead
+	RenderHealthForRow(row, name)
 end
 
--- -------------------------------------------------------------------------- --
--- Test / Config Mode Preview                                                 --
--- -------------------------------------------------------------------------- --
-local DUMMY_CLASSES = { "WARRIOR", "PRIEST", "MAGE", "DRUID", "HUNTER", "ROGUE", "SHAMAN", "PALADIN", "WARLOCK", "WARRIOR" }
-
-function BGT:EnableConfigMode(bracketSize)
+function BGT:EnableConfigMode(size)
 	BGT.isConfig = true
-	local sz = bracketSize or currentSize or 10
-	currentSize = sz
-	BGT.currentSize = sz
-
+	currentSize = size or currentSize
+	BGT.currentSize = currentSize
 	BGT:CreateFrames()
-	BGT:SetupButtonLayout(sz)
-	BGT.MainFrame:Show()
-	BGT.MainFrame.MoveText:Show()
+	BGT:SetupButtonLayout(currentSize)
 
-	local opt = BattlegroundTargets_Options
-	local hideRealm = opt.ButtonHideRealm[sz]
-	local showHealthBar = opt.ButtonShowHealthBar[sz]
-	local showHealthText = opt.ButtonShowHealthText[sz]
-	local maxBarWidth = (opt.ButtonWidth[sz] or 150) - 2
-
-	for i = 1, 40 do
-		local btn = BGT.TargetButton[i]
-		if i <= sz then
-			local cIndex = ((i - 1) % #DUMMY_CLASSES) + 1
-			local cToken = DUMMY_CLASSES[cIndex]
-			local letter = (i <= 26) and string.char(64 + i) or (string.char(64 + math.floor((i - 1) / 26)) .. string.char(65 + ((i - 1) % 26)))
-			local dummyName = "Target" .. letter .. "-Realm" .. (((i - 1) % 4) + 1)
-			btn.targetName = dummyName
-			btn.classToken = cToken
-
-			local col = CLASS_COLORS[cToken] or { r = 0.6, g = 0.6, b = 0.6 }
-			local colR, colG, colB = col.r, col.g, col.b
-			btn.ClassColorBackground:SetTexture(colR * 0.35, colG * 0.35, colB * 0.35, 1)
-			if not (sz == 10 and opt.UseFosterThemeWSG) then
-				btn.HealthBar:SetTexture(colR, colG, colB, 1)
-			else
-				btn.HealthBar:SetVertexColor(colR, colG, colB, 1)
-			end
-
-			local displayName = dummyName
-			if hideRealm then
-				local dashIdx = string.find(dummyName, "-", 1, true)
-				if dashIdx then
-					displayName = string.sub(dummyName, 1, dashIdx - 1)
-				end
-			end
-			btn.Name:SetText(displayName)
-
-			local testPct = 100 - ((i * 7) % 85)
-			if showHealthBar then
-				local barWidth = math.max(0.01, math.min(maxBarWidth, maxBarWidth * (testPct / 100)))
-				btn.HealthBar:SetWidth(barWidth)
-				btn.HealthBar:Show()
-			else
-				btn.HealthBar:Hide()
-			end
-
-			if showHealthText then
-				btn.HealthText:SetText(testPct .. "%")
-				btn.HealthText:Show()
-			else
-				btn.HealthText:Hide()
-			end
-
-			btn:SetAlpha(1.0)
-			btn:Show()
-		else
-			btn.targetName = nil
-			btn:Hide()
-		end
+	enemyCount = currentSize
+	local classes = { "WARRIOR", "PRIEST", "MAGE", "DRUID", "HUNTER", "ROGUE", "SHAMAN", "PALADIN", "WARLOCK" }
+	for i = 1, currentSize do
+		local e = roster[i]
+		e.name = "Target" .. i .. "-Realm"
+		e.classToken = classes[((i - 1) % table.getn(classes)) + 1]
+		e.guid = nil
+		healthPct[e.name] = 100 - ((i * 7) % 85)
+		deadState[e.name] = false
 	end
+	RenderRoster()
 end
 
 function BGT:DisableConfigMode()
 	BGT.isConfig = false
-	BGT.MainFrame.MoveText:Hide()
 	if activeBG then
 		BGT:BattlefieldScoreUpdate()
 	else
 		BGT.MainFrame:Hide()
-		for i = 1, 40 do
-			BGT.TargetButton[i]:Hide()
-		end
 	end
 end
 
 function BGT:CopySettings(sourceSize, destinationSize)
-	local opt = BattlegroundTargets_Options
-	opt.ButtonFontSize[destinationSize]       = opt.ButtonFontSize[sourceSize]
-	opt.ButtonScale[destinationSize]          = opt.ButtonScale[sourceSize]
-	opt.ButtonWidth[destinationSize]          = opt.ButtonWidth[sourceSize]
-	opt.ButtonHeight[destinationSize]         = opt.ButtonHeight[sourceSize]
-	opt.ButtonShowHealthBar[destinationSize]  = opt.ButtonShowHealthBar[sourceSize]
-	opt.ButtonShowHealthText[destinationSize] = opt.ButtonShowHealthText[sourceSize]
-	opt.ButtonHideRealm[destinationSize]      = opt.ButtonHideRealm[sourceSize]
-	opt.ButtonSortBy[destinationSize]         = opt.ButtonSortBy[sourceSize]
-	opt.IndependentPositioning[destinationSize] = opt.IndependentPositioning[sourceSize]
-
-	BGT:SetupButtonLayout(destinationSize)
+	local o = BattlegroundTargets_Options
+	o.ButtonFontSize[destinationSize] = o.ButtonFontSize[sourceSize]
+	o.ButtonScale[destinationSize] = o.ButtonScale[sourceSize]
+	o.ButtonWidth[destinationSize] = o.ButtonWidth[sourceSize]
+	o.ButtonHeight[destinationSize] = o.ButtonHeight[sourceSize]
+	o.ButtonShowHealthBar[destinationSize] = o.ButtonShowHealthBar[sourceSize]
+	o.ButtonShowHealthText[destinationSize] = o.ButtonShowHealthText[sourceSize]
+	o.ButtonHideRealm[destinationSize] = o.ButtonHideRealm[sourceSize]
+	o.ButtonSortBy[destinationSize] = o.ButtonSortBy[sourceSize]
+	o.IndependentPositioning[destinationSize] = o.IndependentPositioning[sourceSize]
 end
 
 function BGT:ToggleOptions()
-	if not BattlegroundTargets_OptionsFrame then
-		if BGT.CreateOptionsFrame then
-			BGT:CreateOptionsFrame()
-		end
+	if not BattlegroundTargets_OptionsFrame and BGT.CreateOptionsFrame then
+		BGT:CreateOptionsFrame()
 	end
 	if BattlegroundTargets_OptionsFrame then
-		if BattlegroundTargets_OptionsFrame:IsShown() then
-			BattlegroundTargets_OptionsFrame:Hide()
-		else
-			BattlegroundTargets_OptionsFrame:Show()
-		end
+		BattlegroundTargets_OptionsFrame:SetShown(not BattlegroundTargets_OptionsFrame:IsShown())
 	end
 end
 
--- -------------------------------------------------------------------------- --
--- Event Registration & Dispatching                                           --
--- -------------------------------------------------------------------------- --
 BGT:RegisterEvent("PLAYER_LOGIN")
 BGT:RegisterEvent("PLAYER_ENTERING_WORLD")
 BGT:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 BGT:RegisterEvent("UPDATE_BATTLEFIELD_SCORE")
-BGT:RegisterEvent("PLAYER_REGEN_DISABLED")
-BGT:RegisterEvent("PLAYER_REGEN_ENABLED")
 BGT:RegisterEvent("UNIT_HEALTH")
 BGT:RegisterEvent("UNIT_HEALTH_FREQUENT")
 BGT:RegisterEvent("UNIT_TARGET")
 BGT:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
 BGT:RegisterEvent("PLAYER_TARGET_CHANGED")
+BGT:RegisterEvent("PLAYER_FOCUS_CHANGED")
+BGT:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+BGT:RegisterEvent("UNIT_NAME_UPDATE")
 
 BGT:SetScript("OnEvent", function()
 	if event == "PLAYER_LOGIN" then
-		BGT:EnsureGlobalTables()
+		BGT:EnsureOptions()
 		BGT:CreateFrames()
-		if BGT.CreateMinimapButton then
-			BGT:CreateMinimapButton()
-		end
+		BGT:SetupButtonLayout(currentSize)
+		if BGT.CreateMinimapButton then BGT:CreateMinimapButton() end
 
 	elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
-		BGT:EnsureGlobalTables()
 		RequestBattlefieldScoreData()
 		BGT:BattlefieldScoreUpdate()
 
 	elseif event == "UPDATE_BATTLEFIELD_SCORE" then
 		BGT:BattlefieldScoreUpdate()
 
-	elseif event == "PLAYER_REGEN_DISABLED" then
-		inCombat = true
-
-	elseif event == "PLAYER_REGEN_ENABLED" then
-		inCombat = false
-
 	elseif event == "UNIT_HEALTH" or event == "UNIT_HEALTH_FREQUENT" then
-		BGT:UpdateUnitHealth(arg1)
+		ObserveUnit(arg1)
 
 	elseif event == "UNIT_TARGET" then
-		if arg1 then
-			BGT:UpdateUnitHealth(arg1 .. "target")
-		end
+		if arg1 then ObserveUnit(arg1 .. "target") end
 
 	elseif event == "UPDATE_MOUSEOVER_UNIT" then
-		BGT:UpdateUnitHealth("mouseover")
+		ObserveUnit("mouseover")
 
 	elseif event == "PLAYER_TARGET_CHANGED" then
-		BGT:UpdateUnitHealth("target")
+		ObserveUnit("target")
+		UpdateAllSelectionVisuals()
+
+	elseif event == "PLAYER_FOCUS_CHANGED" then
+		ObserveUnit("focus")
+		UpdateAllSelectionVisuals()
+
+	elseif event == "NAME_PLATE_UNIT_ADDED" or event == "UNIT_NAME_UPDATE" then
+		ObserveUnit(arg1)
 	end
 end)
 
--- -------------------------------------------------------------------------- --
--- Slash Command Handlers                                                     --
--- -------------------------------------------------------------------------- --
 SLASH_BATTLEGROUNDTARGETS1 = "/bgt"
 SLASH_BATTLEGROUNDTARGETS2 = "/battlegroundtargets"
 SlashCmdList["BATTLEGROUNDTARGETS"] = function(msg)
 	local cmd = string.lower(msg or "")
 	if cmd == "test" then
-		if BGT.isConfig then
-			BGT:DisableConfigMode()
-		else
-			BGT:EnableConfigMode(10)
-		end
+		if BGT.isConfig then BGT:DisableConfigMode() else BGT:EnableConfigMode(10) end
 	elseif cmd == "reset" then
 		BattlegroundTargets_Options.pos = {}
 		BGT:Frame_SetupPosition("BattlegroundTargets_MainFrame")

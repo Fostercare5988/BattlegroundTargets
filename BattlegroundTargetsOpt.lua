@@ -3,7 +3,6 @@
 -- -------------------------------------------------------------------------- --
 
 local BGT = BattlegroundTargets
-local L   = BattlegroundTargets_Localization or {}
 
 local selectedTab = 10
 local activeTabButton = nil
@@ -21,7 +20,7 @@ local function CreateCheckButton(name, parent, text, onClick)
 	return cb
 end
 
-local function CreateSlider(name, parent, text, minVal, maxVal, step, onValChanged)
+local function CreateSlider(name, parent, text, minVal, maxVal, step, isPercent, onValChanged)
 	local s = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
 	s:SetWidth(150)
 	s:SetHeight(16)
@@ -34,7 +33,7 @@ local function CreateSlider(name, parent, text, minVal, maxVal, step, onValChang
 	s.ValueText:SetPoint("LEFT", s, "RIGHT", 10, 0)
 	s:SetScript("OnValueChanged", function()
 		local val = math.floor(this:GetValue())
-		s.ValueText:SetText(tostring(val))
+		s.ValueText:SetText(isPercent and (val .. "%") or tostring(val))
 		onValChanged(val)
 	end)
 	return s
@@ -54,8 +53,8 @@ function BGT:CreateOptionsFrame()
 	f:SetToplevel(true)
 	f:SetClampedToScreen(true)
 	f:SetBackdrop({
-		bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-		edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+		bgFile = "Interface\DialogFrame\UI-DialogBox-Background",
+		edgeFile = "Interface\DialogFrame\UI-DialogBox-Border",
 		tile = true, tileSize = 32, edgeSize = 32,
 		insets = { left = 8, right = 8, top = 8, bottom = 8 }
 	})
@@ -83,7 +82,7 @@ function BGT:CreateOptionsFrame()
 	bottomClose:SetWidth(160)
 	bottomClose:SetHeight(24)
 	bottomClose:SetPoint("BOTTOM", f, "BOTTOM", 0, 16)
-	bottomClose:SetText(L["Close Configuration"] or "Close Configuration")
+	bottomClose:SetText("Close Configuration")
 	bottomClose:SetScript("OnClick", function()
 		f:Hide()
 	end)
@@ -93,10 +92,10 @@ function BGT:CreateOptionsFrame()
 	-- ---------------------------------------------------------------------- --
 	local tabs = {}
 	local tabConfigs = {
-		{ id = 10, name = L["10 vs 10"] or "10 vs 10" },
-		{ id = 15, name = L["15 vs 15"] or "15 vs 15" },
-		{ id = 40, name = L["40 vs 40"] or "40 vs 40" },
-		{ id = 0,  name = L["General Settings"] or "General" },
+		{ id = 10, name = "10 vs 10" },
+		{ id = 15, name = "15 vs 15" },
+		{ id = 40, name = "40 vs 40" },
+		{ id = 0,  name = "General" },
 	}
 
 	local function SelectTab(tabId)
@@ -134,8 +133,8 @@ function BGT:CreateOptionsFrame()
 		tab:SetHeight(22)
 		tab:SetPoint("TOPLEFT", f, "TOPLEFT", 14 + (i - 1) * 72, -38)
 		tab:SetBackdrop({
-			bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-			edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+			bgFile = "Interface\Tooltips\UI-Tooltip-Background",
+			edgeFile = "Interface\Tooltips\UI-Tooltip-Border",
 			tile = true, tileSize = 8, edgeSize = 8,
 			insets = { left = 2, right = 2, top = 2, bottom = 2 }
 		})
@@ -158,63 +157,67 @@ function BGT:CreateOptionsFrame()
 	bp:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 45)
 
 	-- Checkbuttons
-	bp.EnableBracket = CreateCheckButton("BGTOpt_EnableBracket", bp, L["Enable"] or "Enable", function()
+	bp.EnableBracket = CreateCheckButton("BGTOpt_EnableBracket", bp, "Enable", function()
 		local opt = BattlegroundTargets_Options
 		opt.EnableBracket[selectedTab] = this:GetChecked() and true or false
 		BGT:SetupButtonLayout(selectedTab)
+		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
 	end)
 	bp.EnableBracket:SetPoint("TOPLEFT", bp, "TOPLEFT", 12, -4)
 
-	bp.IndependentPos = CreateCheckButton("BGTOpt_IndependentPos", bp, L["Independent Positioning"] or "Independent Positioning", function()
+	bp.IndependentPos = CreateCheckButton("BGTOpt_IndependentPos", bp, "Independent Positioning", function()
 		local opt = BattlegroundTargets_Options
 		opt.IndependentPositioning[selectedTab] = this:GetChecked() and true or false
 		BGT:Frame_SetupPosition("BattlegroundTargets_MainFrame")
 	end)
 	bp.IndependentPos:SetPoint("LEFT", bp.EnableBracket.Label, "RIGHT", 24, 0)
 
-	bp.HideRealm = CreateCheckButton("BGTOpt_HideRealm", bp, L["Hide Realm"] or "Hide Realm", function()
+	bp.HideRealm = CreateCheckButton("BGTOpt_HideRealm", bp, "Hide Realm", function()
 		local opt = BattlegroundTargets_Options
 		opt.ButtonHideRealm[selectedTab] = this:GetChecked() and true or false
-		if BGT.isConfig then BGT:EnableConfigMode(selectedTab) end
+		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
 	end)
 	bp.HideRealm:SetPoint("TOPLEFT", bp.EnableBracket, "BOTTOMLEFT", 0, -6)
 
-	bp.ShowHealthBar = CreateCheckButton("BGTOpt_ShowHealthBar", bp, L["Show Health Bar"] or "Show Health Bar", function()
+	bp.ShowHealthBar = CreateCheckButton("BGTOpt_ShowHealthBar", bp, "Show Health Bar", function()
 		local opt = BattlegroundTargets_Options
 		opt.ButtonShowHealthBar[selectedTab] = this:GetChecked() and true or false
-		if BGT.isConfig then BGT:EnableConfigMode(selectedTab) end
+		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
 	end)
 	bp.ShowHealthBar:SetPoint("TOPLEFT", bp.HideRealm, "BOTTOMLEFT", 0, -6)
 
-	bp.ShowHealthText = CreateCheckButton("BGTOpt_ShowHealthText", bp, L["Show Percent"] or "Show Percent", function()
+	bp.ShowHealthText = CreateCheckButton("BGTOpt_ShowHealthText", bp, "Show Percent", function()
 		local opt = BattlegroundTargets_Options
 		opt.ButtonShowHealthText[selectedTab] = this:GetChecked() and true or false
-		if BGT.isConfig then BGT:EnableConfigMode(selectedTab) end
+		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
 	end)
 	bp.ShowHealthText:SetPoint("LEFT", bp.ShowHealthBar.Label, "RIGHT", 24, 0)
 
 	-- Sliders
-	bp.FontSize = CreateSlider("BGTOpt_FontSize", bp, L["Text Size"] or "Text Size", 6, 20, 1, function(val)
+	bp.FontSize = CreateSlider("BGTOpt_FontSize", bp, "Text Size", 6, 20, 1, false, function(val)
 		BattlegroundTargets_Options.ButtonFontSize[selectedTab] = val
 		BGT:SetupButtonLayout(selectedTab)
+		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
 	end)
 	bp.FontSize:SetPoint("TOPLEFT", bp.ShowHealthBar, "BOTTOMLEFT", 4, -18)
 
-	bp.Scale = CreateSlider("BGTOpt_Scale", bp, L["Scale"] or "Scale", 50, 200, 5, function(val)
+	bp.Scale = CreateSlider("BGTOpt_Scale", bp, "Scale", 50, 200, 5, true, function(val)
 		BattlegroundTargets_Options.ButtonScale[selectedTab] = val / 100
 		BGT:SetupButtonLayout(selectedTab)
 	end)
 	bp.Scale:SetPoint("TOPLEFT", bp.FontSize, "BOTTOMLEFT", 0, -18)
 
-	bp.Width = CreateSlider("BGTOpt_Width", bp, L["Width"] or "Width", 60, 300, 5, function(val)
+	bp.Width = CreateSlider("BGTOpt_Width", bp, "Width", 60, 300, 5, false, function(val)
 		BattlegroundTargets_Options.ButtonWidth[selectedTab] = val
 		BGT:SetupButtonLayout(selectedTab)
+		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
 	end)
 	bp.Width:SetPoint("TOPLEFT", bp.Scale, "BOTTOMLEFT", 0, -18)
 
-	bp.Height = CreateSlider("BGTOpt_Height", bp, L["Height"] or "Height", 10, 40, 1, function(val)
+	bp.Height = CreateSlider("BGTOpt_Height", bp, "Height", 10, 40, 1, false, function(val)
 		BattlegroundTargets_Options.ButtonHeight[selectedTab] = val
 		BGT:SetupButtonLayout(selectedTab)
+		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
 	end)
 	bp.Height:SetPoint("TOPLEFT", bp.Width, "BOTTOMLEFT", 0, -18)
 
@@ -227,7 +230,7 @@ function BGT:CreateOptionsFrame()
 	gp:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 45)
 	gp:Hide()
 
-	gp.Minimap = CreateCheckButton("BGTOpt_Minimap", gp, L["Show Minimap-Button"] or "Show Minimap-Button", function()
+	gp.Minimap = CreateCheckButton("BGTOpt_Minimap", gp, "Show Minimap-Button", function()
 		BattlegroundTargets_Options.MinimapButton = this:GetChecked() and true or false
 		if BattlegroundTargets_MinimapButton then
 			if BattlegroundTargets_Options.MinimapButton then
@@ -242,6 +245,7 @@ function BGT:CreateOptionsFrame()
 	gp.UseFosterWSG = CreateCheckButton("BGTOpt_UseFosterWSG", gp, "Use FosterFrames Theme in WSG", function()
 		BattlegroundTargets_Options.UseFosterThemeWSG = this:GetChecked() and true or false
 		BGT:SetupButtonLayout(10)
+		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
 	end)
 	gp.UseFosterWSG:SetPoint("TOPLEFT", gp.Minimap, "BOTTOMLEFT", 0, -12)
 
@@ -312,8 +316,9 @@ function BGT:CreateMinimapButton()
 
 	local function UpdatePos()
 		local angle = BattlegroundTargets_Options.MinimapButtonPos or 45
-		local x = 80 * cos(angle)
-		local y = 80 * sin(angle)
+		local rad = math.rad(angle)
+		local x = 80 * math.cos(rad)
+		local y = 80 * math.sin(rad)
 		btn:SetPoint("CENTER", Minimap, "CENTER", x, y)
 	end
 

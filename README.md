@@ -3,7 +3,7 @@
 [![Client](https://img.shields.io/badge/Client-1.12.1%20Vanilla-blue.svg)](#)
 [![ClassicAPI](https://img.shields.io/badge/ClassicAPI-v1.13.4+-orange.svg)](#)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-v2.2+-brightgreen.svg)](#)
-[![UnitXP](https://img.shields.io/badge/UnitXP_SP3-v89+-purple.svg)](#)
+[![UnitXP](https://img.shields.io/badge/UnitXP_SP3-v90+-purple.svg)](#)
 [![DXVK](https://img.shields.io/badge/DXVK-Vulkan-red.svg)](#)
 [![License](https://img.shields.io/badge/License-GPLv2-yellow.svg)](#)
 
@@ -19,25 +19,26 @@ To run this modernized build, the following client extensions are strictly requi
 
 | Component | Minimum Version | Architectural Role |
 | :--- | :---: | :--- |
-| **ClassicAPI.dll** | `v1.13.4+` | Modern Lua environment, native `table.wipe`, C_Timer, and compatibility layers. |
-| **SuperWoW.dll** | `v2.2+` | Instantaneous `TargetByName(name, true)` exact-name targeting in and out of combat without lockdown taint. |
+| **ClassicAPI.dll** | `v1.13.4+` | Modern Lua environment, native `table.wipe`, C_Timer, nameplate token telemetry (`NAME_PLATE_UNIT_ADDED`), and native focus support. |
+| **SuperWoW.dll** | `v2.2+` | Direct GUID targeting via `TargetUnit(guid)` and exact-name targeting via `TargetByName(name, true)`. |
 | **NamPower.dll** | `v4.6.3+` | Fast hardware spell querying & event routing. |
-| **UnitXP SP3** | `v89+` | Accurate numerical health & unit telemetry (`UnitXP("health", unit)`). |
-| **DXVK** | `v2.0+` (e.g. `v3.1`) | Vulkan translation layer ensuring jitter-free frame pacing. |
+| **UnitXP SP3** | `v90+` | Accurate numerical health & unit telemetry (`UnitXP("health", unit)`). |
+| **DXVK** | `v2.0+` (e.g. `v3.1`) | Direct3D 9 to Vulkan translation layer ensuring jitter-free frame pacing. |
 
 ---
 
 ## ⚔️ Key Features
 
 - **Pure Enemy Frames**: Displays the active enemy roster cleanly with class-colored health status bars, player names, and real-time health percentage numbers. All unneeded role/healer icons, range dropdowns, target count badges, and focus markers have been completely removed.
-- **Unrestricted Instant Targeting**: Left-click instantly targets the exact enemy unit using SuperWoW's native C++ `TargetByName(name, true)` without combat lockdown restrictions or taint. Right-click sets focus via native `FocusUnit`.
+- **GUID-Aware Instant Targeting**: Left-click prioritizes SuperWoW's native C++ `TargetUnit(guid)` when observed, with instantaneous fallback to `TargetByName(name, true)` without combat lockdown restrictions or taint. Right-click sets focus via native `FocusUnit`.
+- **Nameplate Token Telemetry**: Automatically listens to ClassicAPI's `NAME_PLATE_UNIT_ADDED` events (`nameplate1..N`), capturing enemy GUIDs and real-time health as soon as opponents come within 3D view.
 - **Three Dedicated Battleground Brackets**:
   - **10 vs 10**: Warsong Gulch (supports optional FosterFrames sleek dark card styling).
   - **15 vs 15**: Arathi Basin and Eye of the Storm.
   - **40 vs 40**: Alterac Valley.
 - **Independent Layout Customization**: Separate text size, scale, width, height, and display toggles (Show Health Bar, Show Percent, Hide Realm, Class/Name sorting) for each bracket.
-- **Child Element Click Passthrough**: Explicit `:EnableMouse(false)` configured across all text labels, health bars, and background textures (Rule C8) to eliminate click dead zones.
-- **Zero-GC Table Recycling**: Pre-allocated array buffers and native C++ `table.wipe` memory recycling (Rule D1 & B10) ensuring zero garbage collector spikes during intense PvP combat.
+- **Zero-GC Active Sorting**: Fixed-size 40-slot array buffers sorted using an allocation-free insertion sort strictly over the active segment (`1..enemyCount`), eliminating Lua GC spikes during battlegrounds.
+- **Unified Parent Frame Hierarchy**: Rows are direct children of `BattlegroundTargets_MainFrame`, providing clean scale inheritance and zero-overhead mouse passthrough during combat (Rule C8).
 - **Modular Architecture (Rule H7)**: Core engine logic (`BattlegroundTargets.lua`) cleanly separated from the configuration interface (`BattlegroundTargetsOpt.lua`).
 
 ---
@@ -57,7 +58,6 @@ To run this modernized build, the following client extensions are strictly requi
 ```text
 BattlegroundTargets/
 ├── BattlegroundTargets.toc
-├── Localization.lua
 ├── BattlegroundTargets.lua
 ├── BattlegroundTargetsOpt.lua
 ├── Textures/
