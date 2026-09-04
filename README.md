@@ -21,7 +21,7 @@ To run this modernized build, the following client extensions are strictly requi
 | :--- | :---: | :--- |
 | **ClassicAPI.dll** | `v1.13.3+` | Modern Lua environment & compatibility layers. |
 | **SuperWoW.dll** | `v2.2+` | Instantaneous `TargetByName(name, true)` exact-name targeting in and out of combat without lockdown taint. |
-| **NamPower.dll** | `v4.6.2+` | Fast hardware spell querying & event routing. |
+| **NamPower.dll** | `v4.6.3+` | Fast hardware spell querying & event routing. |
 | **UnitXP SP3** | `v89+` | Accurate 3D Euclidean distances (`UnitXP("distance", unit)`). |
 | **DXVK** | `v2.0+` (e.g. `v3.1`) | Vulkan translation layer ensuring jitter-free frame pacing. |
 
