@@ -688,9 +688,18 @@ function Spy:RenderRows()
 
 		-- Icon & State Tag
 		if data.isStealthed then
-			row.Icon:SetTexture("Interface\\Icons\\Ability_Stealth")
+			local sName = data.stealthSpell or "Stealth"
+			local tex = (sName == "Prowl" and "Interface\\Icons\\Ability_Hunter_Pet_Cat") or "Interface\\Icons\\Ability_Stealth"
+			row.Icon:SetTexture(tex)
+			row.Icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 			row.Icon:Show()
-			row.TagText:SetText("|cff00ffff" .. string.upper(string.sub(data.stealthSpell or "STEALTH", 1, 5)) .. "|r")
+			local tag = (sName == "Prowl" and "PROWL")
+				or (sName == "Vanish" and "VANISH")
+				or (sName == "Shadowmeld" and "MELD")
+				or (sName == "Cloaking" and "CLOAK")
+				or (string.find(sName, "Invis") and "INVIS")
+				or "STEALTH"
+			row.TagText:SetText("|cff00ffff" .. tag .. "|r")
 		else
 			if data.classToken then
 				row.Icon:SetTexture("Interface\\WorldStateFrame\\Icons-Classes")
