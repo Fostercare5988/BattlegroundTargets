@@ -349,7 +349,6 @@ function BGT:EnsureOptions()
 	end
 
 	if o.MinimapButton == nil then o.MinimapButton = true end
-	if o.UseFosterThemeWSG == nil then o.UseFosterThemeWSG = true end
 
 	o.Spy = o.Spy or {}
 	if o.Spy.Enabled == nil then o.Spy.Enabled = true end
@@ -692,7 +691,6 @@ function BGT:SetupButtonLayout(size)
 	local height = o.ButtonHeight[size]
 	local fontSize = o.ButtonFontSize[size]
 	local scale = o.ButtonScale[size]
-	local useTexture = o.UseFosterThemeWSG
 
 	BGT.MainFrame:SetWidth(width)
 	BGT.MainFrame:SetScale(scale)
@@ -712,11 +710,7 @@ function BGT:SetupButtonLayout(size)
 			btn.StealthIcon:SetWidth(height - 4)
 			btn.StealthIcon:SetHeight(height - 4)
 		end
-		if useTexture then
-			btn.HealthBar:SetTexture(BAR_TEXTURE)
-		else
-			btn.HealthBar:SetTexture(1, 1, 1, 1)
-		end
+		btn.HealthBar:SetTexture(BAR_TEXTURE)
 	end
 
 	BGT:Frame_SetupPosition("BattlegroundTargets_MainFrame")

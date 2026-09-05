@@ -36,7 +36,7 @@ To run this modernized build, the following client extensions are strictly requi
 - **GUID-Aware Instant Targeting**: Left-click prioritizes SuperWoW's native C++ `TargetUnit(guid)` when observed, with instantaneous fallback to `TargetByName(name, true)` without combat lockdown restrictions or taint. Right-click sets focus via native `FocusUnit`.
 - **Nameplate Token Telemetry**: Automatically listens to ClassicAPI's `NAME_PLATE_UNIT_ADDED` events (`nameplate1..N`), capturing enemy GUIDs and real-time health as soon as opponents come within 3D view.
 - **Three Dedicated Battleground Brackets**:
-  - **10 vs 10**: Warsong Gulch (supports optional FosterFrames sleek dark card styling).
+  - **10 vs 10**: Warsong Gulch.
   - **15 vs 15**: Arathi Basin and Eye of the Storm.
   - **40 vs 40**: Alterac Valley.
 - **Independent Layout Customization**: Separate text size, scale, width, height, and display toggles (Show Health Bar, Show Percent, Stealth Icon, Dim Stealthed, Stealth Tag, Hide Realm, Class/Name sorting) for each bracket, plus a dedicated "Spy" tab for open-world settings.

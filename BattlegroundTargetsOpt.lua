@@ -54,11 +54,13 @@ function BGT:CreateOptionsFrame()
 	f:SetToplevel(true)
 	f:SetClampedToScreen(true)
 	f:SetBackdrop({
-		bgFile = "Interface\DialogFrame\UI-DialogBox-Background",
-		edgeFile = "Interface\DialogFrame\UI-DialogBox-Border",
-		tile = true, tileSize = 32, edgeSize = 32,
-		insets = { left = 8, right = 8, top = 8, bottom = 8 }
+		bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+		tile = true, tileSize = 16, edgeSize = 16,
+		insets = { left = 4, right = 4, top = 4, bottom = 4 }
 	})
+	f:SetBackdropColor(0.04, 0.04, 0.07, 0.96)
+	f:SetBackdropBorderColor(0.35, 0.35, 0.45, 0.95)
 
 	tinsert(UISpecialFrames, "BattlegroundTargets_OptionsFrame")
 
@@ -104,9 +106,13 @@ function BGT:CreateOptionsFrame()
 		selectedTab = tabId
 		for _, tab in ipairs(tabs) do
 			if tab.tabId == tabId then
-				tab:SetBackdropColor(0.8, 0.2, 0.2, 1)
+				tab:SetBackdropColor(0.70, 0.15, 0.15, 1.0)
+				tab:SetBackdropBorderColor(1.0, 0.35, 0.35, 1.0)
+				tab.Text:SetTextColor(1, 1, 1)
 			else
-				tab:SetBackdropColor(0.2, 0.2, 0.2, 1)
+				tab:SetBackdropColor(0.10, 0.10, 0.14, 0.90)
+				tab:SetBackdropBorderColor(0.25, 0.25, 0.35, 0.85)
+				tab.Text:SetTextColor(0.8, 0.8, 0.8)
 			end
 		end
 
@@ -117,9 +123,6 @@ function BGT:CreateOptionsFrame()
 			local opt = BattlegroundTargets_Options
 			if f.GeneralPanel.Minimap then
 				f.GeneralPanel.Minimap:SetChecked(opt.MinimapButton and true or false)
-			end
-			if f.GeneralPanel.UseFosterWSG then
-				f.GeneralPanel.UseFosterWSG:SetChecked(opt.UseFosterThemeWSG and true or false)
 			end
 		elseif tabId == -1 then
 			f.BracketPanel:Hide()
@@ -144,12 +147,13 @@ function BGT:CreateOptionsFrame()
 		tab:SetHeight(22)
 		tab:SetPoint("TOPLEFT", f, "TOPLEFT", 12 + (i - 1) * 64, -38)
 		tab:SetBackdrop({
-			bgFile = "Interface\Tooltips\UI-Tooltip-Background",
-			edgeFile = "Interface\Tooltips\UI-Tooltip-Border",
-			tile = true, tileSize = 8, edgeSize = 8,
+			bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+			edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+			tile = true, tileSize = 10, edgeSize = 10,
 			insets = { left = 2, right = 2, top = 2, bottom = 2 }
 		})
-		tab:SetBackdropColor(0.2, 0.2, 0.2, 1)
+		tab:SetBackdropColor(0.10, 0.10, 0.14, 0.90)
+		tab:SetBackdropBorderColor(0.25, 0.25, 0.35, 0.85)
 		tab.Text = tab:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
 		tab.Text:SetPoint("CENTER", 0, 0)
 		tab.Text:SetText(cfg.name)
@@ -158,6 +162,21 @@ function BGT:CreateOptionsFrame()
 		end)
 		tabs[i] = tab
 	end
+
+	-- Inner Card Framing (crisp border enclosing the options content)
+	local innerCard = CreateFrame("Frame", "BattlegroundTargets_OptionsInnerCard", f)
+	innerCard:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -66)
+	innerCard:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -8, 46)
+	innerCard:SetBackdrop({
+		bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+		tile = true, tileSize = 12, edgeSize = 12,
+		insets = { left = 3, right = 3, top = 3, bottom = 3 }
+	})
+	innerCard:SetBackdropColor(0.02, 0.02, 0.04, 0.70)
+	innerCard:SetBackdropBorderColor(0.22, 0.22, 0.30, 0.85)
+	innerCard:EnableMouse(false)
+	f.InnerCard = innerCard
 
 	-- ---------------------------------------------------------------------- --
 	-- Bracket Panel Widgets                                                  --
@@ -273,13 +292,6 @@ function BGT:CreateOptionsFrame()
 		end
 	end)
 	gp.Minimap:SetPoint("TOPLEFT", gp, "TOPLEFT", 12, -12)
-
-	gp.UseFosterWSG = CreateCheckButton("BGTOpt_UseFosterWSG", gp, "Use FosterFrames Theme in WSG", function()
-		BattlegroundTargets_Options.UseFosterThemeWSG = this:GetChecked() and true or false
-		BGT:SetupButtonLayout(10)
-		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
-	end)
-	gp.UseFosterWSG:SetPoint("TOPLEFT", gp.Minimap, "BOTTOMLEFT", 0, -12)
 
 	-- ---------------------------------------------------------------------- --
 	-- Spy Panel Widgets                                                      --
