@@ -246,9 +246,9 @@ end
 
 local function UpdateAllSelectionVisuals()
 	if not BGT.TargetButton then return end
-	for i = 1, currentSize do
+	for i = 1, MAX_ENEMIES do
 		local btn = BGT.TargetButton[i]
-		if btn:IsShown() then
+		if btn and btn:IsShown() then
 			UpdateRowSelectionVisual(btn)
 		end
 	end
@@ -537,7 +537,7 @@ local function RenderRoster()
 		end
 	end
 
-	for i = 1, currentSize do
+	for i = 1, MAX_ENEMIES do
 		local btn = BGT.TargetButton[i]
 		if i <= displayCount then
 			local data = roster[i]
@@ -697,11 +697,25 @@ function BGT:EnableConfigMode(size)
 		healthPct[e.name] = 100 - ((i * 7) % 85)
 		deadState[e.name] = false
 	end
+	for i = currentSize + 1, MAX_ENEMIES do
+		local e = roster[i]
+		e.name = nil
+		e.classToken = nil
+		e.guid = nil
+	end
 	RenderRoster()
 end
 
 function BGT:DisableConfigMode()
 	BGT.isConfig = false
+	for i = 1, MAX_ENEMIES do
+		local btn = BGT.TargetButton[i]
+		if btn then
+			btn.targetName = nil
+			btn.targetGUID = nil
+			btn:Hide()
+		end
+	end
 	if activeBG then
 		BGT:BattlefieldScoreUpdate()
 	else
