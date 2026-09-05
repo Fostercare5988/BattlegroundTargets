@@ -5,7 +5,6 @@
 local BGT = BattlegroundTargets
 
 local selectedTab = 10
-local activeTabButton = nil
 
 -- UI Helper Templates
 local function CreateCheckButton(name, parent, text, onClick)

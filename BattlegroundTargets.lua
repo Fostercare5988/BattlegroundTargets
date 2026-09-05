@@ -61,67 +61,10 @@ local CLASS_ORDER = {
 	WARRIOR = 9,
 }
 
-local LOCALIZED_CLASS_TO_TOKEN = {
-	-- English
-	["WARRIOR"] = "WARRIOR",
-	["PALADIN"] = "PALADIN",
-	["HUNTER"] = "HUNTER",
-	["ROGUE"] = "ROGUE",
-	["PRIEST"] = "PRIEST",
-	["SHAMAN"] = "SHAMAN",
-	["MAGE"] = "MAGE",
-	["WARLOCK"] = "WARLOCK",
-	["DRUID"] = "DRUID",
-
-	-- German
-	["KRIEGER"] = "WARRIOR",
-	["JÄGER"] = "HUNTER",
-	["JAEGER"] = "HUNTER",
-	["SCHURKE"] = "ROGUE",
-	["PRIESTER"] = "PRIEST",
-	["SCHAMANE"] = "SHAMAN",
-	["MAGIER"] = "MAGE",
-	["HEXENMEISTER"] = "WARLOCK",
-
-	-- French
-	["GUERRIER"] = "WARRIOR",
-	["CHASSEUR"] = "HUNTER",
-	["VOLEUR"] = "ROGUE",
-	["PRÊTRE"] = "PRIEST",
-	["PRETRE"] = "PRIEST",
-	["CHAMAN"] = "SHAMAN",
-	["DÉMONISTE"] = "WARLOCK",
-	["DEMONISTE"] = "WARLOCK",
-
-	-- Spanish
-	["GUERRERO"] = "WARRIOR",
-	["CAZADOR"] = "HUNTER",
-	["PÍCARO"] = "ROGUE",
-	["PICARO"] = "ROGUE",
-	["SACERDOTE"] = "PRIEST",
-	["CHAMÁN"] = "SHAMAN",
-	["CHAMAN"] = "SHAMAN",
-	["MAGO"] = "MAGE",
-	["BRUJO"] = "WARLOCK",
-	["DRUIDA"] = "DRUID",
-
-	-- Russian
-	["ВОИН"] = "WARRIOR",
-	["ПАЛАДИН"] = "PALADIN",
-	["ОХОТНИК"] = "HUNTER",
-	["РАЗБОЙНИK"] = "ROGUE",
-	["РАЗБОЙНИК"] = "ROGUE",
-	["ЖРЕЦ"] = "PRIEST",
-	["ШАМАН"] = "SHAMAN",
-	["МАГ"] = "MAGE",
-	["ЧЕРНОКНИЖНИК"] = "WARLOCK",
-	["ДРУИД"] = "DRUID",
-}
-
 local function ResolveClassToken(rawClass)
 	if not rawClass or type(rawClass) ~= "string" then return "WARRIOR" end
 	local upper = string.upper(rawClass)
-	return LOCALIZED_CLASS_TO_TOKEN[upper] or (CLASS_COLORS[upper] and upper) or "WARRIOR"
+	return (CLASS_COLORS[upper] and upper) or "WARRIOR"
 end
 
 local function GetClassColor(classToken)
@@ -718,9 +661,9 @@ end
 
 local function GetBracketSize(bgName)
 	if not bgName then return currentSize end
-	if string.find(bgName, "Warsong") or string.find(bgName, "Kriegshymnen") or string.find(bgName, "Goulet") then
+	if string.find(bgName, "Warsong") then
 		return 10
-	elseif string.find(bgName, "Arathi") or string.find(bgName, "Eye") or string.find(bgName, "Auge") or string.find(bgName, "Oeil") then
+	elseif string.find(bgName, "Arathi") or string.find(bgName, "Eye") then
 		return 15
 	elseif string.find(bgName, "Alterac") then
 		return 40
@@ -995,7 +938,7 @@ function BGT:EnableConfigMode(size)
 	for i = 1, currentSize do
 		local e = roster[i]
 		e.name = "Target" .. i .. "-Realm"
-		e.classToken = classes[((i - 1) % table.getn(classes)) + 1]
+		e.classToken = classes[((i - 1) % #classes) + 1]
 		e.guid = nil
 		healthPct[e.name] = 100 - ((i * 7) % 85)
 		deadState[e.name] = false
