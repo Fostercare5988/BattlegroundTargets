@@ -67,7 +67,8 @@ BattlegroundTargets/
 ├── BattlegroundTargetsOpt.lua
 ├── Textures/
 │   ├── barTexture.tga
-│   └── border.tga
+│   ├── border.tga
+│   └── prowl.tga
 ├── LICENSE.txt
 └── README.md
 ```

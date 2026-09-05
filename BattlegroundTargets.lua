@@ -10,7 +10,7 @@ if not (CLASSIC_API_VERSION and SUPERWOW_VERSION) then
 	return
 end
 
-local MOD_VERSION = "3.1.0"
+local MOD_VERSION = "3.2.0"
 local MAX_ENEMIES = 40
 local BRACKETS = { 10, 15, 40 }
 local FONT = "Fonts\\FRIZQT__.TTF"
