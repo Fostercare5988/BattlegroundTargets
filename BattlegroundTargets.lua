@@ -152,12 +152,9 @@ local function CheckIsStealthSpell(spellId)
 	local spellDur = s and s.duration or 0
 
 	if SpellInfo then
-		local name, _, icon = SpellInfo(spellId)
+		local name = SpellInfo(spellId)
 		if name and name ~= "" then
 			spellName = spellName or name
-		end
-		if icon and icon ~= "" then
-			spellTex = string.find(icon, "\\") and icon or ("Interface\\Icons\\" .. icon)
 		end
 	end
 
