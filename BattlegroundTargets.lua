@@ -15,6 +15,7 @@ local MAX_ENEMIES = 40
 local BRACKETS = { 10, 15, 40 }
 local FONT = "Fonts\\FRIZQT__.TTF"
 local BAR_TEXTURE = [[Interface\AddOns\BattlegroundTargets\Textures\barTexture.tga]]
+local PROWL_TEXTURE = [[Interface\AddOns\BattlegroundTargets\Textures\prowl.tga]]
 
 BattlegroundTargets = CreateFrame("Frame", "BattlegroundTargets_CoreFrame", UIParent)
 local BGT = BattlegroundTargets
@@ -101,9 +102,9 @@ local STEALTH_SPELLS = {
 	[1856] = { name = "Vanish",  texture = "Interface\\Icons\\Ability_Stealth",  duration = 0 },
 	[1857] = { name = "Vanish",  texture = "Interface\\Icons\\Ability_Stealth",  duration = 0 },
 	-- Druid Prowl
-	[5215] = { name = "Prowl",   texture = "Interface\\Icons\\Ability_Hunter_Pet_Cat", duration = 0 },
-	[6783] = { name = "Prowl",   texture = "Interface\\Icons\\Ability_Hunter_Pet_Cat", duration = 0 },
-	[9913] = { name = "Prowl",   texture = "Interface\\Icons\\Ability_Hunter_Pet_Cat", duration = 0 },
+	[5215] = { name = "Prowl",   texture = PROWL_TEXTURE, duration = 0 },
+	[6783] = { name = "Prowl",   texture = PROWL_TEXTURE, duration = 0 },
+	[9913] = { name = "Prowl",   texture = PROWL_TEXTURE, duration = 0 },
 	-- Night Elf Shadowmeld
 	[20580] = { name = "Shadowmeld", texture = "Interface\\Icons\\Ability_Racial_ShadowMeld", duration = 0 },
 	-- Invisibility Potions
@@ -121,7 +122,7 @@ local STEALTH_SPELLS = {
 
 local STEALTH_NAMES = {
 	["Stealth"]             = { name = "Stealth",             texture = "Interface\\Icons\\Ability_Stealth", duration = 0 },
-	["Prowl"]               = { name = "Prowl",               texture = "Interface\\Icons\\Ability_Hunter_Pet_Cat", duration = 0 },
+	["Prowl"]               = { name = "Prowl",               texture = PROWL_TEXTURE, duration = 0 },
 	["Vanish"]              = { name = "Vanish",              texture = "Interface\\Icons\\Ability_Stealth", duration = 0 },
 	["Shadowmeld"]          = { name = "Shadowmeld",          texture = "Interface\\Icons\\Ability_Racial_ShadowMeld", duration = 0 },
 	["Invisibility"]        = { name = "Invisibility",        texture = "Interface\\Icons\\Spell_Nature_Invisibilty", duration = 18 },
@@ -132,10 +133,11 @@ local STEALTH_NAMES = {
 
 local STEALTH_TEXTURE_LOOKUP = {
 	["Interface\\Icons\\Ability_Stealth"]            = "Stealth",
-	["Interface\\Icons\\Ability_Hunter_Pet_Cat"]     = "Prowl",
+	[PROWL_TEXTURE]                                  = "Prowl",
 	["Interface\\Icons\\Ability_Druid_SupriseAttack"] = "Prowl",
 	["Interface\\Icons\\Ability_Druid_CatForm"]      = "Prowl",
 	["Interface\\Icons\\Ability_Ambush"]             = "Prowl",
+	["Interface\\Icons\\Ability_Hunter_Pet_Cat"]     = "Prowl",
 	["Interface\\Icons\\Ability_Vanish"]             = "Vanish",
 	["Interface\\Icons\\Ability_Racial_ShadowMeld"]  = "Shadowmeld",
 	["Interface\\Icons\\Spell_Nature_Invisibilty"]    = "Invisibility",
@@ -327,8 +329,8 @@ local function UpdateRowStealthVisual(index, name)
 	if stealth and not dead and (o.ShowStealthIcon[size] ~= false) then
 		local sName = stealth.spellName or "Stealth"
 		local tex = stealth.texture
-		if sName == "Prowl" or string.find(tex or "", "Pet_Cat") or string.find(tex or "", "SupriseAttack") or string.find(tex or "", "Ambush") or string.find(tex or "", "CatForm") then
-			tex = "Interface\\Icons\\Ability_Hunter_Pet_Cat"
+		if sName == "Prowl" or string.find(tex or "", "prowl") or string.find(tex or "", "SupriseAttack") or string.find(tex or "", "Pet_Cat") or string.find(tex or "", "Ambush") or string.find(tex or "", "CatForm") then
+			tex = PROWL_TEXTURE
 		elseif sName == "Vanish" or sName == "Stealth" or string.find(tex or "", "Vanish") or string.find(tex or "", "Stealth") then
 			tex = "Interface\\Icons\\Ability_Stealth"
 		elseif not tex or tex == "" then
@@ -969,7 +971,7 @@ function BGT:EnableConfigMode(size)
 				stealthedState[e.name] = { isStealthed = true, spellName = "Vanish", texture = "Interface\\Icons\\Ability_Stealth" }
 			end
 		elseif e.classToken == "DRUID" and (i % 2 == 0) then
-			stealthedState[e.name] = { isStealthed = true, spellName = "Prowl", texture = "Interface\\Icons\\Ability_Hunter_Pet_Cat" }
+			stealthedState[e.name] = { isStealthed = true, spellName = "Prowl", texture = PROWL_TEXTURE }
 		elseif i == 3 then
 			stealthedState[e.name] = { isStealthed = true, spellName = "Invisibility", texture = "Interface\\Icons\\Spell_Nature_Invisibilty" }
 		else

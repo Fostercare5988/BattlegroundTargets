@@ -15,6 +15,7 @@ local MAX_SPY_ENEMIES = 20
 local MAX_SPY_ROWS = 10
 local FONT = "Fonts\\FRIZQT__.TTF"
 local BAR_TEXTURE = [[Interface\AddOns\BattlegroundTargets\Textures\barTexture.tga]]
+local PROWL_TEXTURE = [[Interface\AddOns\BattlegroundTargets\Textures\prowl.tga]]
 
 -- Pre-allocated memory tables (Rule D1 Zero GC Churn)
 local trackedEnemies = {}
@@ -689,7 +690,7 @@ function Spy:RenderRows()
 		-- Icon & State Tag
 		if data.isStealthed then
 			local sName = data.stealthSpell or "Stealth"
-			local tex = (sName == "Prowl" and "Interface\\Icons\\Ability_Hunter_Pet_Cat") or "Interface\\Icons\\Ability_Stealth"
+			local tex = (sName == "Prowl" and PROWL_TEXTURE) or "Interface\\Icons\\Ability_Stealth"
 			row.Icon:SetTexture(tex)
 			row.Icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 			row.Icon:Show()
