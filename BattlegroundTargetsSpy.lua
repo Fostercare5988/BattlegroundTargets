@@ -1,0 +1,806 @@
+-- -------------------------------------------------------------------------- --
+-- BattlegroundTargets: Open-World Spy Module                                 --
+-- Engineered natively for World of Warcraft 1.12.1 (Enhanced Engine)        --
+-- Leveraging SuperWoW v2.2+, ClassicAPI v1.13.4+, NamPower v4.6.3+, UnitXP  --
+-- -------------------------------------------------------------------------- --
+
+-- Strict Engine Dependency Guard (Mandatory ClassicAPI v1.13.4+ & SuperWoW v2.2+)
+if not (CLASSIC_API_VERSION and SUPERWOW_VERSION) then return end
+
+BattlegroundTargets.Spy = BattlegroundTargets.Spy or {}
+local Spy = BattlegroundTargets.Spy
+local BGT = BattlegroundTargets
+
+local MAX_SPY_ENEMIES = 20
+local MAX_SPY_ROWS = 10
+local FONT = "Fonts\\FRIZQT__.TTF"
+local BAR_TEXTURE = [[Interface\AddOns\BattlegroundTargets\Textures\barTexture.tga]]
+
+-- Pre-allocated memory tables (Rule D1 Zero GC Churn)
+local trackedEnemies = {}
+for i = 1, MAX_SPY_ENEMIES do
+	trackedEnemies[i] = {
+		name = nil,
+		shortName = nil,
+		classToken = nil,
+		level = nil,
+		healthPct = 100,
+		lastSeen = 0,
+		guid = nil,
+		isStealthed = false,
+		stealthSpell = nil,
+		wasStealthedAlerted = false,
+	}
+end
+local activeEnemyCount = 0
+
+local nameToTrackIndex = {}
+local guidToName = {}
+local hostileCache = {}
+local friendlyCache = {}
+local soundDebounce = {}
+
+Spy.isTestMode = false
+
+-- -------------------------------------------------------------------------- --
+-- Hostility & Entity Resolution Helpers                                      --
+-- -------------------------------------------------------------------------- --
+local function StripRealm(name)
+	if not name then return "" end
+	local p = string.find(name, "-", 1, true)
+	if p then
+		return string.sub(name, 1, p - 1)
+	end
+	return name
+end
+
+local function GetPlayerFaction()
+	return UnitFactionGroup("player")
+end
+
+local function IsHostilePlayer(guid, name)
+	if not guid and not name then return false end
+
+	if name and friendlyCache[name] then return false end
+	if name and hostileCache[name] then return true end
+
+	if name and name == UnitName("player") then
+		friendlyCache[name] = true
+		return false
+	end
+	local pGUID = UnitGUID("player")
+	if guid and pGUID and guid == pGUID then
+		return false
+	end
+
+	-- In SuperWoW / 1.12.1, player GUIDs start with 0x0000
+	if guid and type(guid) == "string" and string.sub(guid, 1, 6) ~= "0x0000" then
+		return false
+	end
+
+	if guid and UnitIsPlayer and not UnitIsPlayer(guid) then
+		return false
+	end
+
+	if guid and UnitCanAttack and UnitCanAttack("player", guid) then
+		if name then hostileCache[name] = true end
+		return true
+	end
+
+	local f = guid and UnitFactionGroup and UnitFactionGroup(guid)
+	local pf = GetPlayerFaction()
+	if f and pf then
+		if f ~= pf then
+			if name then hostileCache[name] = true end
+			return true
+		else
+			if name then friendlyCache[name] = true end
+			return false
+		end
+	end
+
+	if guid and UnitIsFriend and UnitIsFriend("player", guid) == 1 then
+		if name then friendlyCache[name] = true end
+		return false
+	end
+
+	if name and hostileCache[name] then
+		return true
+	end
+
+	return false
+end
+
+-- -------------------------------------------------------------------------- --
+-- Allocation-Free Insertion Sort by lastSeen (Descending)                    --
+-- -------------------------------------------------------------------------- --
+local function SortTrackedEnemies()
+	for i = 2, activeEnemyCount do
+		local j = i
+		while j > 1 and (trackedEnemies[j].lastSeen > trackedEnemies[j - 1].lastSeen) do
+			trackedEnemies[j], trackedEnemies[j - 1] = trackedEnemies[j - 1], trackedEnemies[j]
+			j = j - 1
+		end
+	end
+	for i = 1, activeEnemyCount do
+		nameToTrackIndex[trackedEnemies[i].name] = i
+	end
+end
+
+-- -------------------------------------------------------------------------- --
+-- Record / Update Hostile Player Entry                                       --
+-- -------------------------------------------------------------------------- --
+function Spy:RecordEnemy(name, classToken, level, guid, healthPct, isStealth, stealthSpell)
+	if not name or name == "" then return end
+	if friendlyCache[name] then return end
+
+	local opt = BattlegroundTargets_Options and BattlegroundTargets_Options.Spy
+	if opt and not opt.Enabled then return end
+	if BGT.activeBG then return end
+
+	local now = GetTime()
+	local idx = nameToTrackIndex[name]
+	local isNew = false
+
+	if not idx then
+		if activeEnemyCount < MAX_SPY_ENEMIES then
+			activeEnemyCount = activeEnemyCount + 1
+			idx = activeEnemyCount
+		else
+			idx = activeEnemyCount
+			if trackedEnemies[idx].name then
+				nameToTrackIndex[trackedEnemies[idx].name] = nil
+			end
+		end
+		nameToTrackIndex[name] = idx
+		isNew = true
+	end
+
+	local e = trackedEnemies[idx]
+	e.name = name
+	e.shortName = StripRealm(name)
+	if classToken then
+		e.classToken = (BGT.ResolveClassToken and BGT.ResolveClassToken(classToken)) or classToken
+	end
+	if level and level > 0 then e.level = level end
+	if guid then
+		e.guid = guid
+		guidToName[guid] = name
+	end
+	if healthPct then e.healthPct = healthPct end
+	e.lastSeen = now
+
+	if isStealth ~= nil then
+		e.isStealthed = isStealth
+		if stealthSpell then e.stealthSpell = stealthSpell end
+	end
+
+	-- Audio notification with debouncing
+	if opt and opt.SoundAlert and isNew then
+		local lastSound = soundDebounce[name] or 0
+		if (now - lastSound) > 8 then
+			soundDebounce[name] = now
+			if e.isStealthed and opt.StealthAlert then
+				PlaySoundFile("Sound\\Spells\\ShadersProwl.wav", "Master")
+			else
+				PlaySound("ReadyCheck")
+			end
+		end
+	elseif opt and opt.StealthAlert and isStealth and not e.wasStealthedAlerted then
+		e.wasStealthedAlerted = true
+		PlaySoundFile("Sound\\Spells\\ShadersProwl.wav", "Master")
+	end
+
+	SortTrackedEnemies()
+	Spy:RenderRows()
+end
+
+function Spy:SetUnitStealthState(name, isStealthed, spellName)
+	if not name or not nameToTrackIndex[name] then return end
+	local idx = nameToTrackIndex[name]
+	local e = trackedEnemies[idx]
+	e.isStealthed = isStealthed
+	if spellName then e.stealthSpell = spellName end
+	e.lastSeen = GetTime()
+
+	local opt = BattlegroundTargets_Options and BattlegroundTargets_Options.Spy
+	if opt and opt.StealthAlert and isStealthed and not e.wasStealthedAlerted then
+		e.wasStealthedAlerted = true
+		PlaySoundFile("Sound\\Spells\\ShadersProwl.wav", "Master")
+	end
+
+	SortTrackedEnemies()
+	Spy:RenderRows()
+end
+
+-- -------------------------------------------------------------------------- --
+-- Clear History                                                              --
+-- -------------------------------------------------------------------------- --
+function Spy:ClearHistory()
+	table.wipe(nameToTrackIndex)
+	for i = 1, MAX_SPY_ENEMIES do
+		local e = trackedEnemies[i]
+		e.name = nil
+		e.shortName = nil
+		e.classToken = nil
+		e.level = nil
+		e.healthPct = 100
+		e.lastSeen = 0
+		e.guid = nil
+		e.isStealthed = false
+		e.stealthSpell = nil
+		e.wasStealthedAlerted = false
+	end
+	activeEnemyCount = 0
+	Spy:RenderRows()
+end
+
+-- -------------------------------------------------------------------------- --
+-- Formatting Elapsed Time                                                    --
+-- -------------------------------------------------------------------------- --
+local function FormatElapsedTime(lastSeen, now)
+	local diff = math.max(0, math.floor(now - lastSeen))
+	if diff < 5 then
+		return "Just now"
+	elseif diff < 60 then
+		return diff .. "s"
+	else
+		local mins = math.floor(diff / 60)
+		return mins .. "m"
+	end
+end
+
+-- -------------------------------------------------------------------------- --
+-- Spy Frame Creation                                                         --
+-- -------------------------------------------------------------------------- --
+function Spy:CreateFrames()
+	if Spy.Frame then return end
+
+	local f = CreateFrame("Frame", "BattlegroundTargets_SpyFrame", UIParent)
+	f:SetWidth(180)
+	f:SetHeight(40)
+	f:SetMovable(true)
+	f:EnableMouse(true)
+	f:SetClampedToScreen(true)
+	f:Hide()
+
+	f:SetBackdrop({
+		bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+		edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+		tile = true, tileSize = 12, edgeSize = 12,
+		insets = { left = 3, right = 3, top = 3, bottom = 3 }
+	})
+	f:SetBackdropColor(0.05, 0.05, 0.08, 0.85)
+	f:SetBackdropBorderColor(0.3, 0.3, 0.4, 0.9)
+
+	f:RegisterForDrag("LeftButton")
+	f:SetScript("OnDragStart", function() this:StartMoving() end)
+	f:SetScript("OnDragStop", function()
+		this:StopMovingOrSizing()
+		Spy:SavePosition()
+	end)
+
+	-- Header Title
+	local title = f:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+	title:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -6)
+	title:SetText("Spy (0)")
+	f.Title = title
+
+	-- Clear Button (X)
+	local clearBtn = CreateFrame("Button", nil, f)
+	clearBtn:SetWidth(14)
+	clearBtn:SetHeight(14)
+	clearBtn:SetPoint("TOPRIGHT", f, "TOPRIGHT", -5, -4)
+	local clearText = clearBtn:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+	clearText:SetPoint("CENTER", 0, 0)
+	clearText:SetText("x")
+	clearBtn:SetScript("OnClick", function()
+		Spy:ClearHistory()
+	end)
+
+	-- Pre-allocated Rows
+	f.rows = {}
+	for i = 1, MAX_SPY_ROWS do
+		local btn = CreateFrame("Button", "BattlegroundTargets_SpyRow" .. i, f)
+		btn:SetWidth(170)
+		btn:SetHeight(20)
+		btn:SetPoint("TOPLEFT", f, "TOPLEFT", 5, -20 - (i - 1) * 21)
+
+		-- Row Background
+		local bg = btn:CreateTexture(nil, "BACKGROUND")
+		bg:SetAllPoints()
+		bg:SetTexture(0, 0, 0, 0.6)
+		btn.Bg = bg
+
+		-- Status Bar (Class Colored)
+		local sb = btn:CreateTexture(nil, "BORDER")
+		sb:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
+		sb:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+		sb:SetTexture(BAR_TEXTURE)
+		btn.StatusBar = sb
+
+		-- Icon (Class or Stealth)
+		local icon = btn:CreateTexture(nil, "ARTWORK")
+		icon:SetWidth(16)
+		icon:SetHeight(16)
+		icon:SetPoint("LEFT", btn, "LEFT", 2, 0)
+		icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		btn.Icon = icon
+
+		-- Level Text
+		local lvl = btn:CreateFontString(nil, "OVERLAY")
+		lvl:SetFont(FONT, 9, "OUTLINE")
+		lvl:SetPoint("LEFT", icon, "RIGHT", 3, 0)
+		lvl:SetTextColor(1, 0.82, 0)
+		btn.LevelText = lvl
+
+		-- Name Text
+		local nameText = btn:CreateFontString(nil, "OVERLAY")
+		nameText:SetFont(FONT, 10, "OUTLINE")
+		nameText:SetPoint("LEFT", lvl, "RIGHT", 3, 0)
+		nameText:SetPoint("RIGHT", btn, "RIGHT", -46, 0)
+		nameText:SetJustifyH("LEFT")
+		btn.NameText = nameText
+
+		-- State Tag (e.g. STEALTH, 95%)
+		local tag = btn:CreateFontString(nil, "OVERLAY")
+		tag:SetFont(FONT, 8, "OUTLINE")
+		tag:SetPoint("RIGHT", btn, "RIGHT", -26, 0)
+		btn.TagText = tag
+
+		-- Elapsed Time Text
+		local timeText = btn:CreateFontString(nil, "OVERLAY")
+		timeText:SetFont(FONT, 8, "OUTLINE")
+		timeText:SetPoint("RIGHT", btn, "RIGHT", -3, 0)
+		timeText:SetTextColor(0.8, 0.8, 0.8)
+		btn.TimeText = timeText
+
+		-- Disable mouse on all child textures/fontstrings (Rule C8)
+		-- Enable mouse exclusively on parent row with left/right click (Rule C5)
+		btn:EnableMouse(true)
+		btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+
+		btn:SetScript("OnClick", function()
+			local tName = this.targetName
+			if not tName then return end
+			local tGUID = this.targetGUID or guidToName[tName]
+
+			if arg1 == "LeftButton" then
+				if tGUID then
+					TargetUnit(tGUID)
+				else
+					TargetByName(tName, true)
+				end
+			elseif arg1 == "RightButton" then
+				if tGUID then
+					FocusUnit(tGUID)
+				else
+					TargetByName(tName, true)
+					if UnitExists("target") and UnitName("target") == tName then
+						FocusUnit("target")
+					end
+				end
+			end
+		end)
+
+		btn:SetScript("OnEnter", function()
+			if not this.targetName then return end
+			GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
+			GameTooltip:ClearLines()
+			GameTooltip:AddLine(this.targetName, 1, 1, 1)
+			if this.targetClass then
+				GameTooltip:AddLine("Class: " .. this.targetClass, 0.8, 0.8, 0.8)
+			end
+			if this.targetLevel and this.targetLevel > 0 then
+				GameTooltip:AddLine("Level: " .. this.targetLevel, 1, 0.82, 0)
+			end
+			if this.targetHealth then
+				GameTooltip:AddLine("Health: " .. this.targetHealth .. "%", 0.2, 1, 0.2)
+			end
+			if this.targetStealth then
+				GameTooltip:AddLine("State: STEALTHED (" .. (this.targetStealthSpell or "Stealth") .. ")", 0.4, 0.6, 1)
+			end
+			GameTooltip:AddLine("Left-Click: Target  |  Right-Click: Focus", 0.5, 0.5, 0.5)
+			GameTooltip:Show()
+		end)
+
+		btn:SetScript("OnLeave", function()
+			GameTooltip:Hide()
+		end)
+
+		btn:Hide()
+		f.rows[i] = btn
+	end
+
+	Spy.Frame = f
+	Spy:ApplyPosition()
+	Spy:ApplyScale()
+end
+
+-- -------------------------------------------------------------------------- --
+-- Position & Scale Management                                                --
+-- -------------------------------------------------------------------------- --
+function Spy:ApplyPosition()
+	if not Spy.Frame then return end
+	local o = BattlegroundTargets_Options
+	local x = o and o.pos and o.pos["BattlegroundTargets_SpyFrame_posX"]
+	local y = o and o.pos and o.pos["BattlegroundTargets_SpyFrame_posY"]
+	Spy.Frame:ClearAllPoints()
+	if x and y then
+		Spy.Frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+	else
+		Spy.Frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 100, -200)
+	end
+end
+
+function Spy:SavePosition()
+	if not Spy.Frame then return end
+	local o = BattlegroundTargets_Options
+	if not o then return end
+	o.pos = o.pos or {}
+	o.pos["BattlegroundTargets_SpyFrame_posX"] = Spy.Frame:GetLeft()
+	o.pos["BattlegroundTargets_SpyFrame_posY"] = Spy.Frame:GetTop()
+end
+
+function Spy:ApplyScale()
+	if not Spy.Frame then return end
+	local opt = BattlegroundTargets_Options and BattlegroundTargets_Options.Spy
+	local scale = (opt and opt.Scale) or 1.0
+	Spy.Frame:SetScale(scale)
+end
+
+-- -------------------------------------------------------------------------- --
+-- Render Spy Rows                                                            --
+-- -------------------------------------------------------------------------- --
+function Spy:RenderRows()
+	if not Spy.Frame then return end
+
+	local opt = BattlegroundTargets_Options and BattlegroundTargets_Options.Spy
+	if not opt or not opt.Enabled or BGT.activeBG then
+		Spy.Frame:Hide()
+		return
+	end
+
+	local now = GetTime()
+	local maxRows = math.min(MAX_SPY_ROWS, opt.MaxRows or 5)
+	local count = Spy.isTestMode and 3 or activeEnemyCount
+
+	if count == 0 then
+		if opt.AutoHide then
+			Spy.Frame:Hide()
+		else
+			Spy.Frame.Title:SetText("Spy (0)")
+			for i = 1, MAX_SPY_ROWS do
+				Spy.Frame.rows[i]:Hide()
+			end
+			Spy.Frame:SetHeight(26)
+			Spy.Frame:Show()
+		end
+		return
+	end
+
+	Spy.Frame.Title:SetText("Spy (" .. count .. ")")
+	local visibleCount = math.min(count, maxRows)
+
+	for i = 1, visibleCount do
+		local row = Spy.Frame.rows[i]
+		local data = trackedEnemies[i]
+
+		row.targetName = data.name
+		row.targetGUID = data.guid
+		row.targetClass = data.classToken
+		row.targetLevel = data.level
+		row.targetHealth = data.healthPct
+		row.targetStealth = data.isStealthed
+		row.targetStealthSpell = data.stealthSpell
+
+		-- Class color
+		local color = (BGT.GetClassColor and BGT.GetClassColor(data.classToken)) or { r = 0.6, g = 0.6, b = 0.6 }
+		row.StatusBar:SetVertexColor(color.r, color.g, color.b, 0.9)
+
+		-- Level
+		if data.level and data.level > 0 then
+			row.LevelText:SetText(tostring(data.level))
+		else
+			row.LevelText:SetText("??")
+		end
+
+		-- Name
+		row.NameText:SetText(data.shortName or data.name or "Unknown")
+
+		-- Icon & State Tag
+		if data.isStealthed then
+			row.Icon:SetTexture("Interface\\Icons\\Ability_Stealth")
+			row.Icon:Show()
+			row.TagText:SetText("|cff00ffff" .. string.upper(string.sub(data.stealthSpell or "STEALTH", 1, 5)) .. "|r")
+		else
+			if data.classToken then
+				row.Icon:SetTexture("Interface\\WorldStateFrame\\Icons-Classes")
+				local coords = CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[data.classToken]
+				if coords then
+					row.Icon:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+				else
+					row.Icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+				end
+				row.Icon:Show()
+			else
+				row.Icon:Hide()
+			end
+
+			if data.healthPct and data.healthPct < 100 then
+				row.TagText:SetText(data.healthPct .. "%")
+			else
+				row.TagText:SetText("")
+			end
+		end
+
+		-- Time elapsed
+		row.TimeText:SetText(FormatElapsedTime(data.lastSeen, now))
+
+		row:Show()
+	end
+
+	for i = visibleCount + 1, MAX_SPY_ROWS do
+		Spy.Frame.rows[i]:Hide()
+	end
+
+	Spy.Frame:SetHeight(24 + (visibleCount * 21) + 4)
+	Spy.Frame:Show()
+end
+
+-- -------------------------------------------------------------------------- --
+-- Periodic Purge Ticker (Hardware C_Timer.NewTicker, 1.0s cadence)           --
+-- -------------------------------------------------------------------------- --
+local function OnSpyTick()
+	if BGT.activeBG then
+		if Spy.Frame and Spy.Frame:IsShown() then Spy.Frame:Hide() end
+		return
+	end
+
+	local opt = BattlegroundTargets_Options and BattlegroundTargets_Options.Spy
+	if not opt or not opt.Enabled then
+		if Spy.Frame and Spy.Frame:IsShown() then Spy.Frame:Hide() end
+		return
+	end
+
+	if Spy.isTestMode then return end
+
+	local now = GetTime()
+	local timeout = opt.Timeout or 30
+	local changed = false
+
+	local i = 1
+	while i <= activeEnemyCount do
+		local e = trackedEnemies[i]
+		if (now - e.lastSeen) > timeout then
+			nameToTrackIndex[e.name] = nil
+			for k = i, activeEnemyCount - 1 do
+				trackedEnemies[k], trackedEnemies[k + 1] = trackedEnemies[k + 1], trackedEnemies[k]
+			end
+			trackedEnemies[activeEnemyCount].name = nil
+			trackedEnemies[activeEnemyCount].guid = nil
+			trackedEnemies[activeEnemyCount].isStealthed = false
+			activeEnemyCount = activeEnemyCount - 1
+			changed = true
+		else
+			i = i + 1
+		end
+	end
+
+	if changed then
+		for k = 1, activeEnemyCount do
+			nameToTrackIndex[trackedEnemies[k].name] = k
+		end
+	end
+
+	Spy:RenderRows()
+end
+
+if C_Timer and C_Timer.NewTicker then
+	C_Timer.NewTicker(1.0, OnSpyTick)
+end
+
+-- -------------------------------------------------------------------------- --
+-- Test Mode Preview                                                          --
+-- -------------------------------------------------------------------------- --
+function Spy:EnableTestMode()
+	Spy.isTestMode = true
+	local now = GetTime()
+
+	local mock = {
+		{ name = "Shadowstalker-Realm", classToken = "ROGUE", level = 60, healthPct = 82, isStealthed = true, stealthSpell = "Stealth", lastSeen = now - 2 },
+		{ name = "Frostweaver-Realm", classToken = "MAGE", level = 60, healthPct = 100, isStealthed = false, lastSeen = now - 9 },
+		{ name = "Ironbreaker-Realm", classToken = "WARRIOR", level = 58, healthPct = 65, isStealthed = false, lastSeen = now - 22 },
+	}
+
+	for i = 1, 3 do
+		local e = trackedEnemies[i]
+		local m = mock[i]
+		e.name = m.name
+		e.shortName = StripRealm(m.name)
+		e.classToken = m.classToken
+		e.level = m.level
+		e.healthPct = m.healthPct
+		e.isStealthed = m.isStealthed
+		e.stealthSpell = m.stealthSpell
+		e.lastSeen = m.lastSeen
+		e.guid = nil
+	end
+
+	Spy:RenderRows()
+end
+
+function Spy:DisableTestMode()
+	Spy.isTestMode = false
+	Spy:ClearHistory()
+end
+
+function Spy:ToggleTestMode()
+	if Spy.isTestMode then
+		Spy:DisableTestMode()
+	else
+		Spy:EnableTestMode()
+	end
+end
+
+function Spy:OnBattlegroundChanged(inBG)
+	if inBG then
+		if Spy.Frame and Spy.Frame:IsShown() then
+			Spy.Frame:Hide()
+		end
+	else
+		Spy:RenderRows()
+	end
+end
+
+-- -------------------------------------------------------------------------- --
+-- Event Telemetry Engine                                                     --
+-- -------------------------------------------------------------------------- --
+local eventFrame = CreateFrame("Frame", "BattlegroundTargets_SpyEventFrame", UIParent)
+eventFrame:RegisterEvent("PLAYER_LOGIN")
+eventFrame:RegisterEvent("UNIT_CASTEVENT")
+eventFrame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+eventFrame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+eventFrame:RegisterEvent("UPDATE_MOUSEOVER_UNIT")
+eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+eventFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
+eventFrame:RegisterEvent("CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_BUFFS")
+eventFrame:RegisterEvent("CHAT_MSG_SPELL_HOSTILEPLAYER_BUFF")
+eventFrame:RegisterEvent("CHAT_MSG_SPELL_AURA_GONE_OTHER")
+eventFrame:RegisterEvent("CHAT_MSG_SPELL_HOSTILEPLAYER_DAMAGE")
+eventFrame:RegisterEvent("CHAT_MSG_COMBAT_HOSTILEPLAYER_HITS")
+
+eventFrame:SetScript("OnEvent", function()
+	if event == "PLAYER_LOGIN" then
+		Spy:CreateFrames()
+		return
+	end
+
+	if BGT.activeBG then return end
+	local opt = BattlegroundTargets_Options and BattlegroundTargets_Options.Spy
+	if not opt or not opt.Enabled then return end
+
+	if event == "UNIT_CASTEVENT" then
+		local casterGUID = arg1
+		local eventType = arg3
+		local spellId = arg4
+		if not casterGUID then return end
+
+		local rawName = UnitName(casterGUID) or guidToName[casterGUID]
+		if not IsHostilePlayer(casterGUID, rawName) then return end
+
+		local classToken = UnitClass(casterGUID)
+		local level = UnitLevel(casterGUID)
+		local isStealth = false
+		local sName = nil
+
+		if eventType == "CAST" and BGT.CheckIsStealthSpell then
+			local isS, spell, tex = BGT.CheckIsStealthSpell(spellId)
+			if isS then
+				isStealth = true
+				sName = spell
+			end
+		end
+
+		if rawName then
+			Spy:RecordEnemy(rawName, classToken, level, casterGUID, nil, isStealth, sName)
+			if eventType == "START" or eventType == "CHANNEL" or eventType == "MAINHAND" or eventType == "OFFHAND" then
+				Spy:SetUnitStealthState(rawName, false)
+			end
+		end
+
+	elseif event == "NAME_PLATE_UNIT_ADDED" then
+		local unit = arg1
+		if not unit or not UnitIsPlayer(unit) then return end
+		if not UnitCanAttack("player", unit) and UnitFactionGroup(unit) == GetPlayerFaction() then return end
+
+		local name = UnitName(unit)
+		if not name then return end
+		hostileCache[name] = true
+
+		local guid = UnitGUID(unit)
+		local _, classToken = UnitClass(unit)
+		local level = UnitLevel(unit)
+		local hp = UnitHealth(unit)
+		local maxHp = UnitHealthMax(unit)
+		local pct = 100
+		if maxHp and maxHp > 0 then
+			pct = math.floor((hp / maxHp) * 100 + 0.5)
+		end
+
+		Spy:RecordEnemy(name, classToken, level, guid, pct)
+
+	elseif event == "PLAYER_TARGET_CHANGED" or event == "UPDATE_MOUSEOVER_UNIT" or event == "PLAYER_FOCUS_CHANGED" then
+		local unit = event == "PLAYER_TARGET_CHANGED" and "target" or (event == "PLAYER_FOCUS_CHANGED" and "focus" or "mouseover")
+		if UnitExists(unit) and UnitIsPlayer(unit) and UnitCanAttack("player", unit) then
+			local name = UnitName(unit)
+			if name then
+				hostileCache[name] = true
+				local guid = UnitGUID(unit)
+				local _, classToken = UnitClass(unit)
+				local level = UnitLevel(unit)
+				local hp = UnitHealth(unit)
+				local maxHp = UnitHealthMax(unit)
+				local pct = 100
+				if maxHp and maxHp > 0 then
+					pct = math.floor((hp / maxHp) * 100 + 0.5)
+				end
+				Spy:RecordEnemy(name, classToken, level, guid, pct)
+			end
+		end
+
+	elseif event == "CHAT_MSG_SPELL_HOSTILEPLAYER_BUFF" then
+		if arg1 then
+			local _, _, enemyName, spellName = string.find(arg1, "^(.-) casts (.-)%.$")
+			if not enemyName then
+				_, _, enemyName, spellName = string.find(arg1, "^(.-) performs (.-)%.$")
+			end
+			if enemyName and spellName then
+				hostileCache[enemyName] = true
+				local isStealth = BGT.CheckIsStealthName and BGT.CheckIsStealthName(spellName)
+				Spy:RecordEnemy(enemyName, nil, nil, nil, nil, isStealth and true or false, spellName)
+			end
+		end
+
+	elseif event == "CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_BUFFS" then
+		if arg1 then
+			local _, _, enemyName, buffName = string.find(arg1, "^(.-) gains (.-)%.$")
+			if enemyName and buffName then
+				hostileCache[enemyName] = true
+				local isStealth = BGT.CheckIsStealthName and BGT.CheckIsStealthName(buffName)
+				Spy:RecordEnemy(enemyName, nil, nil, nil, nil, isStealth and true or false, buffName)
+			end
+		end
+
+	elseif event == "CHAT_MSG_SPELL_AURA_GONE_OTHER" then
+		if arg1 then
+			local _, _, buffName, enemyName = string.find(arg1, "^(.-) fades from (.-)%.$")
+			if buffName and enemyName and BGT.CheckIsStealthName and BGT.CheckIsStealthName(buffName) then
+				Spy:SetUnitStealthState(enemyName, false)
+			end
+		end
+
+	elseif event == "CHAT_MSG_SPELL_HOSTILEPLAYER_DAMAGE" then
+		if arg1 then
+			local _, _, enemyName = string.find(arg1, "^(.-)'s ")
+			if enemyName then
+				hostileCache[enemyName] = true
+				Spy:RecordEnemy(enemyName)
+				Spy:SetUnitStealthState(enemyName, false)
+			end
+		end
+
+	elseif event == "CHAT_MSG_COMBAT_HOSTILEPLAYER_HITS" then
+		if arg1 then
+			local _, _, enemyName = string.find(arg1, "^(.-) hits ")
+			if not enemyName then _, _, enemyName = string.find(arg1, "^(.-) crits ") end
+			if not enemyName then _, _, enemyName = string.find(arg1, "^(.-) misses ") end
+			if not enemyName then _, _, enemyName = string.find(arg1, "^(.-) attacks%.") end
+			if enemyName then
+				hostileCache[enemyName] = true
+				Spy:RecordEnemy(enemyName)
+				Spy:SetUnitStealthState(enemyName, false)
+			end
+		end
+	end
+end)

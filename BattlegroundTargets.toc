@@ -6,4 +6,5 @@
 ## SavedVariables: BattlegroundTargets_Options
 
 BattlegroundTargets.lua
+BattlegroundTargetsSpy.lua
 BattlegroundTargetsOpt.lua

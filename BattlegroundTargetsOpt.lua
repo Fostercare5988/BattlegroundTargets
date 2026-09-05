@@ -47,8 +47,8 @@ function BGT:CreateOptionsFrame()
 
 	local f = CreateFrame("Frame", "BattlegroundTargets_OptionsFrame", UIParent)
 	f:Hide()
-	f:SetWidth(330)
-	f:SetHeight(360)
+	f:SetWidth(340)
+	f:SetHeight(390)
 	f:SetMovable(true)
 	f:EnableMouse(true)
 	f:SetToplevel(true)
@@ -89,13 +89,14 @@ function BGT:CreateOptionsFrame()
 	end)
 
 	-- ---------------------------------------------------------------------- --
-	-- Tab Buttons (10 vs 10, 15 vs 15, 40 vs 40, General)                   --
+	-- Tab Buttons (10v10, 15v15, 40v40, Spy, General)                       --
 	-- ---------------------------------------------------------------------- --
 	local tabs = {}
 	local tabConfigs = {
-		{ id = 10, name = "10 vs 10" },
-		{ id = 15, name = "15 vs 15" },
-		{ id = 40, name = "40 vs 40" },
+		{ id = 10, name = "10v10" },
+		{ id = 15, name = "15v15" },
+		{ id = 40, name = "40v40" },
+		{ id = -1, name = "Spy" },
 		{ id = 0,  name = "General" },
 	}
 
@@ -111,6 +112,7 @@ function BGT:CreateOptionsFrame()
 
 		if tabId == 0 then
 			f.BracketPanel:Hide()
+			if f.SpyPanel then f.SpyPanel:Hide() end
 			f.GeneralPanel:Show()
 			local opt = BattlegroundTargets_Options
 			if f.GeneralPanel.Minimap then
@@ -119,8 +121,16 @@ function BGT:CreateOptionsFrame()
 			if f.GeneralPanel.UseFosterWSG then
 				f.GeneralPanel.UseFosterWSG:SetChecked(opt.UseFosterThemeWSG and true or false)
 			end
+		elseif tabId == -1 then
+			f.BracketPanel:Hide()
+			f.GeneralPanel:Hide()
+			if f.SpyPanel then
+				f.SpyPanel:Show()
+				BGT:UpdateSpyWidgets()
+			end
 		else
 			f.GeneralPanel:Hide()
+			if f.SpyPanel then f.SpyPanel:Hide() end
 			f.BracketPanel:Show()
 			BGT:UpdateOptionsWidgets(tabId)
 			BGT:EnableConfigMode(tabId)
@@ -130,9 +140,9 @@ function BGT:CreateOptionsFrame()
 	for i, cfg in ipairs(tabConfigs) do
 		local tab = CreateFrame("Button", nil, f)
 		tab.tabId = cfg.id
-		tab:SetWidth(66)
+		tab:SetWidth(58)
 		tab:SetHeight(22)
-		tab:SetPoint("TOPLEFT", f, "TOPLEFT", 14 + (i - 1) * 72, -38)
+		tab:SetPoint("TOPLEFT", f, "TOPLEFT", 12 + (i - 1) * 64, -38)
 		tab:SetBackdrop({
 			bgFile = "Interface\Tooltips\UI-Tooltip-Background",
 			edgeFile = "Interface\Tooltips\UI-Tooltip-Border",
@@ -271,6 +281,101 @@ function BGT:CreateOptionsFrame()
 	end)
 	gp.UseFosterWSG:SetPoint("TOPLEFT", gp.Minimap, "BOTTOMLEFT", 0, -12)
 
+	-- ---------------------------------------------------------------------- --
+	-- Spy Panel Widgets                                                      --
+	-- ---------------------------------------------------------------------- --
+	local sp = CreateFrame("Frame", nil, f)
+	f.SpyPanel = sp
+	sp:SetPoint("TOPLEFT", f, "TOPLEFT", 10, -65)
+	sp:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -10, 45)
+	sp:Hide()
+
+	-- Checkbuttons
+	sp.EnableSpy = CreateCheckButton("BGTOpt_SpyEnable", sp, "Enable Open-World Spy", function()
+		local opt = BattlegroundTargets_Options.Spy
+		opt.Enabled = this:GetChecked() and true or false
+		if BGT.Spy and BGT.Spy.RenderRows then BGT.Spy:RenderRows() end
+	end)
+	sp.EnableSpy:SetPoint("TOPLEFT", sp, "TOPLEFT", 12, -4)
+
+	sp.SoundAlert = CreateCheckButton("BGTOpt_SpySoundAlert", sp, "Sound on Enemy Detected", function()
+		BattlegroundTargets_Options.Spy.SoundAlert = this:GetChecked() and true or false
+	end)
+	sp.SoundAlert:SetPoint("TOPLEFT", sp.EnableSpy, "BOTTOMLEFT", 0, -6)
+
+	sp.StealthAlert = CreateCheckButton("BGTOpt_SpyStealthAlert", sp, "Sound on Stealth Detected", function()
+		BattlegroundTargets_Options.Spy.StealthAlert = this:GetChecked() and true or false
+	end)
+	sp.StealthAlert:SetPoint("TOPLEFT", sp.SoundAlert, "BOTTOMLEFT", 0, -6)
+
+	sp.AutoHide = CreateCheckButton("BGTOpt_SpyAutoHide", sp, "Auto-Hide Frame When Empty", function()
+		local opt = BattlegroundTargets_Options.Spy
+		opt.AutoHide = this:GetChecked() and true or false
+		if BGT.Spy and BGT.Spy.RenderRows then BGT.Spy:RenderRows() end
+	end)
+	sp.AutoHide:SetPoint("TOPLEFT", sp.StealthAlert, "BOTTOMLEFT", 0, -6)
+
+	-- Sliders
+	sp.Timeout = CreateSlider("BGTOpt_SpyTimeout", sp, "Inactivity Timeout (sec)", 10, 120, 5, false, function(val)
+		BattlegroundTargets_Options.Spy.Timeout = val
+	end)
+	sp.Timeout:SetPoint("TOPLEFT", sp.AutoHide, "BOTTOMLEFT", 4, -18)
+
+	sp.MaxRows = CreateSlider("BGTOpt_SpyMaxRows", sp, "Max Enemies Displayed", 3, 10, 1, false, function(val)
+		BattlegroundTargets_Options.Spy.MaxRows = val
+		if BGT.Spy and BGT.Spy.RenderRows then BGT.Spy:RenderRows() end
+	end)
+	sp.MaxRows:SetPoint("TOPLEFT", sp.Timeout, "BOTTOMLEFT", 0, -18)
+
+	sp.Scale = CreateSlider("BGTOpt_SpyScale", sp, "Spy Frame Scale", 50, 150, 5, true, function(val)
+		BattlegroundTargets_Options.Spy.Scale = val / 100
+		if BGT.Spy and BGT.Spy.ApplyScale then BGT.Spy:ApplyScale() end
+	end)
+	sp.Scale:SetPoint("TOPLEFT", sp.MaxRows, "BOTTOMLEFT", 0, -18)
+
+	-- Action Buttons
+	sp.TestBtn = CreateFrame("Button", "BGTOpt_SpyTestBtn", sp, "UIPanelButtonTemplate")
+	sp.TestBtn:SetWidth(92)
+	sp.TestBtn:SetHeight(20)
+	sp.TestBtn:SetPoint("TOPLEFT", sp.Scale, "BOTTOMLEFT", 0, -16)
+	sp.TestBtn:SetText("Test Spy")
+	sp.TestBtn:SetScript("OnClick", function()
+		if BGT.Spy and BGT.Spy.ToggleTestMode then
+			BGT.Spy:ToggleTestMode()
+			if BGT.Spy.isTestMode then
+				this:SetText("Hide Test")
+			else
+				this:SetText("Test Spy")
+			end
+		end
+	end)
+
+	sp.ResetPosBtn = CreateFrame("Button", "BGTOpt_SpyResetPosBtn", sp, "UIPanelButtonTemplate")
+	sp.ResetPosBtn:SetWidth(92)
+	sp.ResetPosBtn:SetHeight(20)
+	sp.ResetPosBtn:SetPoint("LEFT", sp.TestBtn, "RIGHT", 6, 0)
+	sp.ResetPosBtn:SetText("Reset Pos")
+	sp.ResetPosBtn:SetScript("OnClick", function()
+		if BattlegroundTargets_Options.pos then
+			BattlegroundTargets_Options.pos["BattlegroundTargets_SpyFrame_posX"] = nil
+			BattlegroundTargets_Options.pos["BattlegroundTargets_SpyFrame_posY"] = nil
+		end
+		if BGT.Spy and BGT.Spy.ApplyPosition then
+			BGT.Spy:ApplyPosition()
+		end
+	end)
+
+	sp.ClearBtn = CreateFrame("Button", "BGTOpt_SpyClearBtn", sp, "UIPanelButtonTemplate")
+	sp.ClearBtn:SetWidth(92)
+	sp.ClearBtn:SetHeight(20)
+	sp.ClearBtn:SetPoint("LEFT", sp.ResetPosBtn, "RIGHT", 6, 0)
+	sp.ClearBtn:SetText("Clear List")
+	sp.ClearBtn:SetScript("OnClick", function()
+		if BGT.Spy and BGT.Spy.ClearHistory then
+			BGT.Spy:ClearHistory()
+		end
+	end)
+
 	-- Hook OnShow & OnHide
 	f:SetScript("OnShow", function()
 		BGT:Frame_SetupPosition("BattlegroundTargets_OptionsFrame")
@@ -278,6 +383,9 @@ function BGT:CreateOptionsFrame()
 	end)
 	f:SetScript("OnHide", function()
 		BGT:DisableConfigMode()
+		if BGT.Spy and BGT.Spy.isTestMode then
+			BGT.Spy:DisableTestMode()
+		end
 	end)
 end
 
@@ -307,6 +415,38 @@ function BGT:UpdateOptionsWidgets(sz)
 
 	bp.Height:SetValue(opt.ButtonHeight[sz] or 20)
 	bp.Height.ValueText:SetText(tostring(opt.ButtonHeight[sz] or 20))
+end
+
+function BGT:UpdateSpyWidgets()
+	local sp = BattlegroundTargets_OptionsFrame and BattlegroundTargets_OptionsFrame.SpyPanel
+	if not sp then return end
+	local opt = BattlegroundTargets_Options and BattlegroundTargets_Options.Spy
+	if not opt then return end
+
+	sp.EnableSpy:SetChecked(opt.Enabled and true or false)
+	sp.SoundAlert:SetChecked(opt.SoundAlert and true or false)
+	sp.StealthAlert:SetChecked(opt.StealthAlert and true or false)
+	sp.AutoHide:SetChecked(opt.AutoHide and true or false)
+
+	local timeout = opt.Timeout or 30
+	sp.Timeout:SetValue(timeout)
+	sp.Timeout.ValueText:SetText(tostring(timeout))
+
+	local maxRows = opt.MaxRows or 5
+	sp.MaxRows:SetValue(maxRows)
+	sp.MaxRows.ValueText:SetText(tostring(maxRows))
+
+	local scalePct = math.floor((opt.Scale or 1.0) * 100)
+	sp.Scale:SetValue(scalePct)
+	sp.Scale.ValueText:SetText(scalePct .. "%")
+
+	if sp.TestBtn then
+		if BGT.Spy and BGT.Spy.isTestMode then
+			sp.TestBtn:SetText("Hide Test")
+		else
+			sp.TestBtn:SetText("Test Spy")
+		end
+	end
 end
 
 -- -------------------------------------------------------------------------- --

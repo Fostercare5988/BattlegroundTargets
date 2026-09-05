@@ -26,6 +26,7 @@ local playerName = UnitName("player")
 local playerFaction = UnitFactionGroup("player") == "Horde" and 0 or 1
 local enemyFaction = playerFaction == 0 and 1 or 0
 local activeBG = false
+BGT.activeBG = false
 local currentSize = 10
 
 local CLASS_COLORS = {
@@ -126,6 +127,8 @@ end
 local function GetClassColor(classToken)
 	return CLASS_COLORS[classToken] or FALLBACK_COLOR
 end
+BGT.ResolveClassToken = ResolveClassToken
+BGT.GetClassColor = GetClassColor
 
 -- Fixed-size roster storage (1..MAX_ENEMIES). Only 1..enemyCount is active.
 local roster = {}
@@ -222,6 +225,8 @@ local function CheckIsStealthName(spellName)
 	end
 	return false
 end
+BGT.CheckIsStealthSpell = CheckIsStealthSpell
+BGT.CheckIsStealthName = CheckIsStealthName
 
 local function StripRealm(name)
 	if not name then return "" end
@@ -345,6 +350,15 @@ function BGT:EnsureOptions()
 
 	if o.MinimapButton == nil then o.MinimapButton = true end
 	if o.UseFosterThemeWSG == nil then o.UseFosterThemeWSG = true end
+
+	o.Spy = o.Spy or {}
+	if o.Spy.Enabled == nil then o.Spy.Enabled = true end
+	if o.Spy.SoundAlert == nil then o.Spy.SoundAlert = true end
+	if o.Spy.StealthAlert == nil then o.Spy.StealthAlert = true end
+	if o.Spy.AutoHide == nil then o.Spy.AutoHide = true end
+	if o.Spy.Timeout == nil then o.Spy.Timeout = 30 end
+	if o.Spy.MaxRows == nil then o.Spy.MaxRows = 5 end
+	if o.Spy.Scale == nil then o.Spy.Scale = 1.0 end
 end
 BGT:EnsureOptions()
 
@@ -641,6 +655,8 @@ function BGT:Frame_SetupPosition(frameName)
 		frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
 	elseif frameName == "BattlegroundTargets_MainFrame" then
 		frame:SetPoint("CENTER", UIParent, "CENTER", 300, 50)
+	elseif frameName == "BattlegroundTargets_SpyFrame" then
+		frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 100, -200)
 	else
 		frame:SetPoint("CENTER", UIParent, "CENTER", 0, 40)
 	end
@@ -811,6 +827,10 @@ function BGT:BattlefieldScoreUpdate(force)
 	local inBG, bgName = DetectBattleground()
 	if not inBG then
 		activeBG = false
+		BGT.activeBG = false
+		if BGT.Spy and BGT.Spy.OnBattlegroundChanged then
+			BGT.Spy:OnBattlegroundChanged(false)
+		end
 		prevEnemyCount = -1
 		wipe(stealthedState)
 		wipe(guidToName)
@@ -818,6 +838,10 @@ function BGT:BattlefieldScoreUpdate(force)
 		return
 	end
 	activeBG = true
+	BGT.activeBG = true
+	if BGT.Spy and BGT.Spy.OnBattlegroundChanged then
+		BGT.Spy:OnBattlegroundChanged(true)
+	end
 
 	local size = GetBracketSize(bgName)
 	if size ~= currentSize then
@@ -1221,9 +1245,16 @@ SlashCmdList["BATTLEGROUNDTARGETS"] = function(msg)
 	local cmd = string.lower(msg or "")
 	if cmd == "test" then
 		if BGT.isConfig then BGT:DisableConfigMode() else BGT:EnableConfigMode(10) end
+	elseif cmd == "spy" then
+		if BGT.Spy and BGT.Spy.ToggleTestMode then
+			BGT.Spy:ToggleTestMode()
+		end
 	elseif cmd == "reset" then
 		BattlegroundTargets_Options.pos = {}
 		BGT:Frame_SetupPosition("BattlegroundTargets_MainFrame")
+		if BGT.Spy and BGT.Spy.ApplyPosition then
+			BGT.Spy:ApplyPosition()
+		end
 		if BattlegroundTargets_OptionsFrame then
 			BGT:Frame_SetupPosition("BattlegroundTargets_OptionsFrame")
 		end

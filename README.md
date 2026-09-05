@@ -32,16 +32,17 @@ To run this modernized build, the following client extensions are strictly requi
 - **Pure Enemy Frames**: Displays the active enemy roster cleanly with class-colored health status bars, player names, and real-time health percentage numbers. All unneeded role/healer icons, range dropdowns, target count badges, and focus markers have been completely removed.
 - **Automated Scoreboard Polling & Zero-Allocation Delta Guard**: Periodically queries the server scoreboard on a 3.0s native hardware ticker (`C_Timer.NewTicker`), completely eliminating the need to manually click the minimap icon. Gated by a zero-allocation delta guard (`HasRosterChanged()`), 99.9% of polling cycles perform zero DOM manipulations, zero table allocations, and zero redraws if the roster has not changed.
 - **Real-Time Stealth & Invisibility Detection**: Instantly detects and displays enemies entering or active in stealth/invisibility (*Stealth*, *Vanish*, *Prowl*, *Shadowmeld*, *Invisibility Potion*, *Lesser Invisibility Potion*, *Gnomish Cloaking Device*, *Smoke Cloud*). Features a crisp dedicated spell icon on the left edge of the row, subtle translucent row dimming (alpha 0.65), and optional stealth status tags, backed by SuperWoW's native C++ `UNIT_CASTEVENT`, ClassicAPI slot-batched aura inspection, and combat log telemetry. Automatically breaks when an enemy attacks, casts non-stealth abilities, takes damage, or dies.
+- **Open-World Spy Detection**: Dedicated companion module (`BattlegroundTargetsSpy.lua`) providing high-cohesion, low-coupling enemy detection in the open world outside battlegrounds. Captures enemy player activity up to ~100 yards via SuperWoW `UNIT_CASTEVENT`, ClassicAPI nameplates (`NAME_PLATE_UNIT_ADDED`), and combat log telemetry. Features a draggable floating list displaying enemy names, class colors, levels, health %, stealth badges, and time-decay timestamps. Supports configurable audio chimes on enemy detection and stealth activation, auto-hiding when empty, left-click targeting, and right-click focus.
 - **GUID-Aware Instant Targeting**: Left-click prioritizes SuperWoW's native C++ `TargetUnit(guid)` when observed, with instantaneous fallback to `TargetByName(name, true)` without combat lockdown restrictions or taint. Right-click sets focus via native `FocusUnit`.
 - **Nameplate Token Telemetry**: Automatically listens to ClassicAPI's `NAME_PLATE_UNIT_ADDED` events (`nameplate1..N`), capturing enemy GUIDs and real-time health as soon as opponents come within 3D view.
 - **Three Dedicated Battleground Brackets**:
   - **10 vs 10**: Warsong Gulch (supports optional FosterFrames sleek dark card styling).
   - **15 vs 15**: Arathi Basin and Eye of the Storm.
   - **40 vs 40**: Alterac Valley.
-- **Independent Layout Customization**: Separate text size, scale, width, height, and display toggles (Show Health Bar, Show Percent, Stealth Icon, Dim Stealthed, Stealth Tag, Hide Realm, Class/Name sorting) for each bracket.
+- **Independent Layout Customization**: Separate text size, scale, width, height, and display toggles (Show Health Bar, Show Percent, Stealth Icon, Dim Stealthed, Stealth Tag, Hide Realm, Class/Name sorting) for each bracket, plus a dedicated "Spy" tab for open-world settings.
 - **Zero-GC Active Sorting**: Fixed-size 40-slot array buffers sorted using an allocation-free insertion sort strictly over the active segment (`1..enemyCount`), eliminating Lua GC spikes during battlegrounds.
 - **Unified Parent Frame Hierarchy**: Rows are direct children of `BattlegroundTargets_MainFrame`, providing clean scale inheritance and zero-overhead mouse passthrough during combat (Rule C8).
-- **Modular Architecture (Rule H7)**: Core engine logic (`BattlegroundTargets.lua`) cleanly separated from the configuration interface (`BattlegroundTargetsOpt.lua`).
+- **Modular Architecture (Rule H7)**: Core engine logic (`BattlegroundTargets.lua`), open-world detection (`BattlegroundTargetsSpy.lua`), and the configuration interface (`BattlegroundTargetsOpt.lua`) are completely decoupled.
 
 ---
 
@@ -50,8 +51,9 @@ To run this modernized build, the following client extensions are strictly requi
 | Command | Action |
 | :--- | :--- |
 | `/bgt` or `/battlegroundtargets` | Toggle the BattlegroundTargets configuration window. |
-| `/bgt test` | Toggle test mode to preview and position frames outside battlegrounds. |
-| `/bgt reset` | Reset all frame positions to default. |
+| `/bgt test` | Toggle test mode to preview and position battleground frames. |
+| `/bgt spy` | Toggle open-world Spy test mode to preview and position the Spy frame. |
+| `/bgt reset` | Reset all frame positions (BattlegroundTargets, Spy, Options) to default. |
 
 ---
 
@@ -61,6 +63,7 @@ To run this modernized build, the following client extensions are strictly requi
 BattlegroundTargets/
 ├── BattlegroundTargets.toc
 ├── BattlegroundTargets.lua
+├── BattlegroundTargetsSpy.lua
 ├── BattlegroundTargetsOpt.lua
 ├── Textures/
 │   ├── barTexture.tga
