@@ -28,7 +28,25 @@ local enemyFaction = playerFaction == 0 and 1 or 0
 local activeBG = false
 local currentSize = 10
 
-local CLASS_COLORS = RAID_CLASS_COLORS
+local CLASS_COLORS = {
+	HUNTER  = { r = 0.67, g = 0.83, b = 0.45 },
+	WARLOCK = { r = 0.58, g = 0.51, b = 0.79 },
+	PRIEST  = { r = 1.00, g = 1.00, b = 1.00 },
+	PALADIN = { r = 0.96, g = 0.55, b = 0.73 },
+	MAGE    = { r = 0.41, g = 0.80, b = 0.94 },
+	ROGUE   = { r = 1.00, g = 0.96, b = 0.41 },
+	DRUID   = { r = 1.00, g = 0.49, b = 0.04 },
+	SHAMAN  = { r = 0.00, g = 0.44, b = 0.87 },
+	WARRIOR = { r = 0.78, g = 0.61, b = 0.43 },
+}
+if RAID_CLASS_COLORS then
+	for k, v in pairs(RAID_CLASS_COLORS) do
+		if k ~= "SHAMAN" and not CLASS_COLORS[k] then
+			CLASS_COLORS[k] = v
+		end
+	end
+end
+
 local FALLBACK_COLOR = { r = 0.60, g = 0.60, b = 0.60 }
 local CLASS_ORDER = {
 	DRUID = 1,
@@ -41,6 +59,73 @@ local CLASS_ORDER = {
 	WARLOCK = 8,
 	WARRIOR = 9,
 }
+
+local LOCALIZED_CLASS_TO_TOKEN = {
+	-- English
+	["WARRIOR"] = "WARRIOR",
+	["PALADIN"] = "PALADIN",
+	["HUNTER"] = "HUNTER",
+	["ROGUE"] = "ROGUE",
+	["PRIEST"] = "PRIEST",
+	["SHAMAN"] = "SHAMAN",
+	["MAGE"] = "MAGE",
+	["WARLOCK"] = "WARLOCK",
+	["DRUID"] = "DRUID",
+
+	-- German
+	["KRIEGER"] = "WARRIOR",
+	["JÄGER"] = "HUNTER",
+	["JAEGER"] = "HUNTER",
+	["SCHURKE"] = "ROGUE",
+	["PRIESTER"] = "PRIEST",
+	["SCHAMANE"] = "SHAMAN",
+	["MAGIER"] = "MAGE",
+	["HEXENMEISTER"] = "WARLOCK",
+
+	-- French
+	["GUERRIER"] = "WARRIOR",
+	["CHASSEUR"] = "HUNTER",
+	["VOLEUR"] = "ROGUE",
+	["PRÊTRE"] = "PRIEST",
+	["PRETRE"] = "PRIEST",
+	["CHAMAN"] = "SHAMAN",
+	["DÉMONISTE"] = "WARLOCK",
+	["DEMONISTE"] = "WARLOCK",
+
+	-- Spanish
+	["GUERRERO"] = "WARRIOR",
+	["CAZADOR"] = "HUNTER",
+	["PÍCARO"] = "ROGUE",
+	["PICARO"] = "ROGUE",
+	["SACERDOTE"] = "PRIEST",
+	["CHAMÁN"] = "SHAMAN",
+	["CHAMAN"] = "SHAMAN",
+	["MAGO"] = "MAGE",
+	["BRUJO"] = "WARLOCK",
+	["DRUIDA"] = "DRUID",
+
+	-- Russian
+	["ВОИН"] = "WARRIOR",
+	["ПАЛАДИН"] = "PALADIN",
+	["ОХОТНИК"] = "HUNTER",
+	["РАЗБОЙНИK"] = "ROGUE",
+	["РАЗБОЙНИК"] = "ROGUE",
+	["ЖРЕЦ"] = "PRIEST",
+	["ШАМАН"] = "SHAMAN",
+	["МАГ"] = "MAGE",
+	["ЧЕРНОКНИЖНИК"] = "WARLOCK",
+	["ДРУИД"] = "DRUID",
+}
+
+local function ResolveClassToken(rawClass)
+	if not rawClass or type(rawClass) ~= "string" then return "WARRIOR" end
+	local upper = string.upper(rawClass)
+	return LOCALIZED_CLASS_TO_TOKEN[upper] or (CLASS_COLORS[upper] and upper) or "WARRIOR"
+end
+
+local function GetClassColor(classToken)
+	return CLASS_COLORS[classToken] or FALLBACK_COLOR
+end
 
 -- Fixed-size roster storage (1..MAX_ENEMIES). Only 1..enemyCount is active.
 local roster = {}
@@ -59,15 +144,12 @@ local deadState = {}
 local wipe = table.wipe
 
 local function StripRealm(name)
+	if not name then return "" end
 	local p = string.find(name, "-", 1, true)
 	if p then
 		return string.sub(name, 1, p - 1)
 	end
 	return name
-end
-
-local function GetClassColor(classToken)
-	return CLASS_COLORS[classToken] or FALLBACK_COLOR
 end
 
 local function ClassThenNameSort(a, b)
@@ -365,7 +447,7 @@ function BGT:SetupButtonLayout(size)
 	local height = o.ButtonHeight[size]
 	local fontSize = o.ButtonFontSize[size]
 	local scale = o.ButtonScale[size]
-	local useTexture = size == 10 and o.UseFosterThemeWSG
+	local useTexture = o.UseFosterThemeWSG
 
 	BGT.MainFrame:SetWidth(width)
 	BGT.MainFrame:SetScale(scale)
@@ -506,7 +588,7 @@ function BGT:BattlefieldScoreUpdate()
 	local numScores = GetNumBattlefieldScores()
 	for i = 1, numScores do
 		local name, _, _, _, _, faction = GetBattlefieldScore(i)
-		if name == playerName then
+		if name and StripRealm(name) == playerName then
 			enemyFaction = faction == 0 and 1 or 0
 			break
 		end
@@ -514,12 +596,13 @@ function BGT:BattlefieldScoreUpdate()
 
 	enemyCount = 0
 	for i = 1, numScores do
-		local name, _, _, _, _, faction, _, _, _, classToken = GetBattlefieldScore(i)
-		if name and name ~= playerName and faction == enemyFaction and enemyCount < MAX_ENEMIES then
+		local name, _, _, _, _, faction, _, _, class, classToken = GetBattlefieldScore(i)
+		if name and StripRealm(name) ~= playerName and faction == enemyFaction and enemyCount < MAX_ENEMIES then
 			enemyCount = enemyCount + 1
 			local e = roster[enemyCount]
 			e.name = name
-			e.classToken = classToken or "WARRIOR"
+			local rawClass = (type(classToken) == "string" and classToken) or (type(class) == "string" and class)
+			e.classToken = ResolveClassToken(rawClass)
 			e.guid = nameToGUID[name]
 		end
 	end
@@ -558,6 +641,18 @@ local function ObserveUnit(unit)
 
 	local row = nameToRow[name]
 	if not row then return end
+
+	local _, unitClassToken = UnitClass(unit)
+	if unitClassToken then
+		local btn = BGT.TargetButton[row]
+		if btn and btn.classToken ~= unitClassToken then
+			btn.classToken = unitClassToken
+			if roster[row] then roster[row].classToken = unitClassToken end
+			local color = GetClassColor(unitClassToken)
+			btn.ClassBackground:SetTexture(color.r * 0.30, color.g * 0.30, color.b * 0.30, 1)
+			btn.HealthBar:SetVertexColor(color.r, color.g, color.b, 1)
+		end
+	end
 
 	local hp, hpMax
 	if UnitXP then
