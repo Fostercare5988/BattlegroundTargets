@@ -48,7 +48,7 @@ function BGT:CreateOptionsFrame()
 	local f = CreateFrame("Frame", "BattlegroundTargets_OptionsFrame", UIParent)
 	f:Hide()
 	f:SetWidth(330)
-	f:SetHeight(330)
+	f:SetHeight(360)
 	f:SetMovable(true)
 	f:EnableMouse(true)
 	f:SetToplevel(true)
@@ -194,13 +194,34 @@ function BGT:CreateOptionsFrame()
 	end)
 	bp.ShowHealthText:SetPoint("LEFT", bp.ShowHealthBar.Label, "RIGHT", 24, 0)
 
+	bp.ShowStealthIcon = CreateCheckButton("BGTOpt_ShowStealthIcon", bp, "Stealth Icon", function()
+		local opt = BattlegroundTargets_Options
+		opt.ShowStealthIcon[selectedTab] = this:GetChecked() and true or false
+		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
+	end)
+	bp.ShowStealthIcon:SetPoint("TOPLEFT", bp.ShowHealthBar, "BOTTOMLEFT", 0, -6)
+
+	bp.DimStealthed = CreateCheckButton("BGTOpt_DimStealthed", bp, "Dim Stealthed", function()
+		local opt = BattlegroundTargets_Options
+		opt.DimStealthed[selectedTab] = this:GetChecked() and true or false
+		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
+	end)
+	bp.DimStealthed:SetPoint("LEFT", bp.ShowStealthIcon.Label, "RIGHT", 14, 0)
+
+	bp.ShowStealthText = CreateCheckButton("BGTOpt_ShowStealthText", bp, "Stealth Tag", function()
+		local opt = BattlegroundTargets_Options
+		opt.ShowStealthText[selectedTab] = this:GetChecked() and true or false
+		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
+	end)
+	bp.ShowStealthText:SetPoint("LEFT", bp.DimStealthed.Label, "RIGHT", 14, 0)
+
 	-- Sliders
 	bp.FontSize = CreateSlider("BGTOpt_FontSize", bp, "Text Size", 6, 20, 1, false, function(val)
 		BattlegroundTargets_Options.ButtonFontSize[selectedTab] = val
 		BGT:SetupButtonLayout(selectedTab)
 		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
 	end)
-	bp.FontSize:SetPoint("TOPLEFT", bp.ShowHealthBar, "BOTTOMLEFT", 4, -18)
+	bp.FontSize:SetPoint("TOPLEFT", bp.ShowStealthIcon, "BOTTOMLEFT", 4, -18)
 
 	bp.Scale = CreateSlider("BGTOpt_Scale", bp, "Scale", 50, 200, 5, true, function(val)
 		BattlegroundTargets_Options.ButtonScale[selectedTab] = val / 100
@@ -270,6 +291,9 @@ function BGT:UpdateOptionsWidgets(sz)
 	bp.HideRealm:SetChecked(opt.ButtonHideRealm[sz])
 	bp.ShowHealthBar:SetChecked(opt.ButtonShowHealthBar[sz])
 	bp.ShowHealthText:SetChecked(opt.ButtonShowHealthText[sz])
+	bp.ShowStealthIcon:SetChecked(opt.ShowStealthIcon[sz] and true or false)
+	bp.DimStealthed:SetChecked(opt.DimStealthed[sz] and true or false)
+	bp.ShowStealthText:SetChecked(opt.ShowStealthText[sz] and true or false)
 
 	bp.FontSize:SetValue(opt.ButtonFontSize[sz] or 10)
 	bp.FontSize.ValueText:SetText(tostring(opt.ButtonFontSize[sz] or 10))

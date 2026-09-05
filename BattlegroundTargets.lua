@@ -137,11 +137,91 @@ local enemyCount = 0
 -- Runtime lookup/telemetry caches
 local nameToRow = {}
 local nameToGUID = {}
+local guidToName = {}
 local shortNameToFull = {}
 local healthPct = {}
 local deadState = {}
+local stealthedState = {}
 
 local wipe = table.wipe
+
+local STEALTH_SPELLS = {
+	-- Rogue Stealth
+	[1784] = { name = "Stealth", texture = "Interface\\Icons\\Ability_Stealth", duration = 0 },
+	[1785] = { name = "Stealth", texture = "Interface\\Icons\\Ability_Stealth", duration = 0 },
+	[1786] = { name = "Stealth", texture = "Interface\\Icons\\Ability_Stealth", duration = 0 },
+	[1787] = { name = "Stealth", texture = "Interface\\Icons\\Ability_Stealth", duration = 0 },
+	-- Rogue Vanish
+	[1856] = { name = "Vanish",  texture = "Interface\\Icons\\Ability_Vanish",  duration = 0 },
+	[1857] = { name = "Vanish",  texture = "Interface\\Icons\\Ability_Vanish",  duration = 0 },
+	-- Druid Prowl
+	[5215] = { name = "Prowl",   texture = "Interface\\Icons\\Ability_Druid_SupriseAttack", duration = 0 },
+	[6783] = { name = "Prowl",   texture = "Interface\\Icons\\Ability_Druid_SupriseAttack", duration = 0 },
+	[9913] = { name = "Prowl",   texture = "Interface\\Icons\\Ability_Druid_SupriseAttack", duration = 0 },
+	-- Night Elf Shadowmeld
+	[20580] = { name = "Shadowmeld", texture = "Interface\\Icons\\Ability_Ambush", duration = 0 },
+	-- Invisibility Potions
+	[3680]  = { name = "Lesser Invisibility", texture = "Interface\\Icons\\Spell_Nature_Invisibilty", duration = 15 },
+	[11464] = { name = "Invisibility",        texture = "Interface\\Icons\\Spell_Nature_Invisibilty", duration = 18 },
+	-- Gnomish Cloaking Device
+	[8342]  = { name = "Cloaking",            texture = "Interface\\Icons\\INV_Misc_EngGizmos_04",   duration = 60 },
+	-- Deepwood Pipe (Smoke Cloud)
+	[23133] = { name = "Smoke Cloud",         texture = "Interface\\Icons\\Ability_Stealth", duration = 30 },
+	[23134] = { name = "Smoke Cloud",         texture = "Interface\\Icons\\Ability_Stealth", duration = 30 },
+	-- Mage Invisibility (custom/Vanilla+)
+	[66]    = { name = "Invisibility",        texture = "Interface\\Icons\\Spell_Nature_Invisibilty", duration = 20 },
+	[32612] = { name = "Invisibility",        texture = "Interface\\Icons\\Spell_Nature_Invisibilty", duration = 20 },
+}
+
+local STEALTH_NAMES = {
+	["Stealth"]             = { name = "Stealth",             texture = "Interface\\Icons\\Ability_Stealth", duration = 0 },
+	["Prowl"]               = { name = "Prowl",               texture = "Interface\\Icons\\Ability_Druid_SupriseAttack", duration = 0 },
+	["Vanish"]              = { name = "Vanish",              texture = "Interface\\Icons\\Ability_Vanish", duration = 0 },
+	["Shadowmeld"]          = { name = "Shadowmeld",          texture = "Interface\\Icons\\Ability_Ambush", duration = 0 },
+	["Invisibility"]        = { name = "Invisibility",        texture = "Interface\\Icons\\Spell_Nature_Invisibilty", duration = 18 },
+	["Lesser Invisibility"] = { name = "Lesser Invisibility", texture = "Interface\\Icons\\Spell_Nature_Invisibilty", duration = 15 },
+	["Cloaking"]            = { name = "Cloaking",            texture = "Interface\\Icons\\INV_Misc_EngGizmos_04", duration = 60 },
+	["Smoke Cloud"]         = { name = "Smoke Cloud",         texture = "Interface\\Icons\\Ability_Stealth", duration = 30 },
+}
+
+local STEALTH_TEXTURE_LOOKUP = {
+	["Interface\\Icons\\Ability_Stealth"]            = "Stealth",
+	["Interface\\Icons\\Ability_Druid_SupriseAttack"] = "Prowl",
+	["Interface\\Icons\\Ability_Vanish"]             = "Vanish",
+	["Interface\\Icons\\Ability_Ambush"]             = "Shadowmeld",
+	["Interface\\Icons\\Spell_Nature_Invisibilty"]    = "Invisibility",
+	["Interface\\Icons\\INV_Misc_EngGizmos_04"]      = "Cloaking",
+}
+
+local function CheckIsStealthSpell(spellId)
+	if not spellId then return false end
+	local s = STEALTH_SPELLS[spellId]
+	if s then
+		return true, s.name, s.texture, s.duration
+	end
+	if SpellInfo then
+		local name, _, icon = SpellInfo(spellId)
+		if name and STEALTH_NAMES[name] then
+			local data = STEALTH_NAMES[name]
+			return true, data.name, icon or data.texture, data.duration
+		end
+		if icon and STEALTH_TEXTURE_LOOKUP[icon] then
+			local sName = STEALTH_TEXTURE_LOOKUP[icon]
+			local data = STEALTH_NAMES[sName]
+			return true, data.name, icon, data.duration
+		end
+	end
+	return false
+end
+
+local function CheckIsStealthName(spellName)
+	if not spellName then return false end
+	local data = STEALTH_NAMES[spellName]
+	if data then
+		return true, data.name, data.texture, data.duration
+	end
+	return false
+end
 
 local function StripRealm(name)
 	if not name then return "" end
@@ -193,6 +273,9 @@ function BGT:EnsureOptions()
 	o.ButtonShowHealthText = o.ButtonShowHealthText or {}
 	o.ButtonHideRealm = o.ButtonHideRealm or {}
 	o.ButtonSortBy = o.ButtonSortBy or {}
+	o.ShowStealthIcon = o.ShowStealthIcon or {}
+	o.DimStealthed = o.DimStealthed or {}
+	o.ShowStealthText = o.ShowStealthText or {}
 
 	for _, size in ipairs(BRACKETS) do
 		if o.EnableBracket[size] == nil then o.EnableBracket[size] = true end
@@ -205,12 +288,97 @@ function BGT:EnsureOptions()
 		if o.ButtonShowHealthText[size] == nil then o.ButtonShowHealthText[size] = true end
 		if o.ButtonHideRealm[size] == nil then o.ButtonHideRealm[size] = false end
 		if o.ButtonSortBy[size] == nil then o.ButtonSortBy[size] = 1 end
+		if o.ShowStealthIcon[size] == nil then o.ShowStealthIcon[size] = true end
+		if o.DimStealthed[size] == nil then o.DimStealthed[size] = true end
+		if o.ShowStealthText[size] == nil then o.ShowStealthText[size] = false end
 	end
 
 	if o.MinimapButton == nil then o.MinimapButton = true end
 	if o.UseFosterThemeWSG == nil then o.UseFosterThemeWSG = true end
 end
 BGT:EnsureOptions()
+
+local function UpdateRowStealthVisual(index, name)
+	if not BGT.TargetButton then return end
+	local btn = BGT.TargetButton[index]
+	if not btn or not name then return end
+	local o = BattlegroundTargets_Options
+	local size = currentSize
+	local stealth = stealthedState[name]
+	local dead = deadState[name]
+	local height = o.ButtonHeight[size] or 20
+
+	if stealth and not dead and o.ShowStealthIcon[size] then
+		btn.StealthIcon:SetTexture(stealth.texture or "Interface\\Icons\\Ability_Stealth")
+		btn.StealthIcon:Show()
+		btn.StealthIconBg:Show()
+		btn.Name:SetPoint("LEFT", btn, "LEFT", height + 1, 0)
+	else
+		btn.StealthIcon:Hide()
+		btn.StealthIconBg:Hide()
+		btn.Name:SetPoint("LEFT", btn, "LEFT", 4, 0)
+	end
+
+	if dead then
+		btn:SetAlpha(0.55)
+	elseif stealth and o.DimStealthed[size] then
+		btn:SetAlpha(0.65)
+	else
+		btn:SetAlpha(1.0)
+	end
+
+	if stealth and not dead and o.ShowStealthText[size] then
+		local sName = stealth.spellName or "Stealth"
+		local tag = (sName == "Prowl" and "|cffb0b0ffPROWL|r")
+			or (sName == "Shadowmeld" and "|cff9090ffMELD|r")
+			or (sName == "Cloaking" and "|cff00ffffCLOAK|r")
+			or (string.find(sName, "Invis") and "|cff00ffffINVIS|r")
+			or "|cff9090ffSTEALTH|r"
+		btn.HealthText:SetText(tag)
+		btn.HealthText:Show()
+	else
+		local pct = healthPct[name] or 100
+		if o.ButtonShowHealthText[size] then
+			btn.HealthText:SetText(dead and "|cffff4040DEAD|r" or (pct .. "%"))
+			btn.HealthText:Show()
+		else
+			btn.HealthText:Hide()
+		end
+	end
+end
+
+local function SetUnitStealth(name, isStealthed, spellName, texture, duration)
+	if not name then return end
+	if isStealthed then
+		local entry = stealthedState[name]
+		if not entry then
+			entry = {}
+			stealthedState[name] = entry
+		end
+		entry.isStealthed = true
+		entry.spellName = spellName or "Stealth"
+		entry.texture = texture or "Interface\\Icons\\Ability_Stealth"
+		entry.expireTime = (duration and duration > 0) and (GetTime() + duration) or nil
+
+		if duration and duration > 0 and C_Timer and C_Timer.After then
+			C_Timer.After(duration + 0.5, function()
+				local cur = stealthedState[name]
+				if cur and cur.expireTime and GetTime() >= cur.expireTime then
+					SetUnitStealth(name, false)
+				end
+			end)
+		end
+	else
+		if stealthedState[name] then
+			stealthedState[name] = nil
+		end
+	end
+
+	local row = nameToRow[name]
+	if row then
+		UpdateRowStealthVisual(row, name)
+	end
+end
 
 local function CreateLine(parent, layer)
 	local t = parent:CreateTexture(nil, layer or "OVERLAY")
@@ -316,6 +484,16 @@ function BGT:CreateFrames()
 		btn.Selection:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
 		btn.Selection:SetTexture(1, 1, 1, 0.08)
 		btn.Selection:Hide()
+
+		btn.StealthIconBg = btn:CreateTexture(nil, "OVERLAY")
+		btn.StealthIconBg:SetPoint("LEFT", btn, "LEFT", 1, 0)
+		btn.StealthIconBg:SetTexture(0, 0, 0, 1)
+		btn.StealthIconBg:Hide()
+
+		btn.StealthIcon = btn:CreateTexture(nil, "OVERLAY")
+		btn.StealthIcon:SetPoint("LEFT", btn, "LEFT", 2, 0)
+		btn.StealthIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+		btn.StealthIcon:Hide()
 
 		btn.Name = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 		btn.Name:SetPoint("LEFT", btn, "LEFT", 4, 0)
@@ -459,6 +637,14 @@ function BGT:SetupButtonLayout(size)
 		btn:SetHeight(height)
 		btn.Name:SetFont(FONT, fontSize, "")
 		btn.HealthText:SetFont(FONT, fontSize, "OUTLINE")
+		if btn.StealthIconBg then
+			btn.StealthIconBg:SetWidth(height - 2)
+			btn.StealthIconBg:SetHeight(height - 2)
+		end
+		if btn.StealthIcon then
+			btn.StealthIcon:SetWidth(height - 4)
+			btn.StealthIcon:SetHeight(height - 4)
+		end
 		if useTexture then
 			btn.HealthBar:SetTexture(BAR_TEXTURE)
 		else
@@ -506,14 +692,11 @@ local function RenderHealthForRow(index, name)
 		btn.HealthBar:Hide()
 	end
 
-	if o.ButtonShowHealthText[currentSize] then
-		btn.HealthText:SetText(dead and "|cffff4040DEAD|r" or (pct .. "%"))
-		btn.HealthText:Show()
-	else
-		btn.HealthText:Hide()
+	if dead and stealthedState[name] then
+		stealthedState[name] = nil
 	end
 
-	btn:SetAlpha(dead and 0.55 or 1.0)
+	UpdateRowStealthVisual(index, name)
 end
 
 local function RenderRoster()
@@ -559,6 +742,8 @@ local function RenderRoster()
 		else
 			btn.targetName = nil
 			btn.targetGUID = nil
+			if btn.StealthIcon then btn.StealthIcon:Hide() end
+			if btn.StealthIconBg then btn.StealthIconBg:Hide() end
 			btn:Hide()
 		end
 	end
@@ -575,6 +760,8 @@ function BGT:BattlefieldScoreUpdate()
 	local inBG, bgName = DetectBattleground()
 	if not inBG then
 		activeBG = false
+		wipe(stealthedState)
+		wipe(guidToName)
 		BGT.MainFrame:Hide()
 		return
 	end
@@ -633,6 +820,7 @@ local function ObserveUnit(unit)
 	local guid = UnitGUID(unit)
 	if guid then
 		nameToGUID[name] = guid
+		guidToName[guid] = name
 		local row = nameToRow[name]
 		if row then
 			BGT.TargetButton[row].targetGUID = guid
@@ -652,6 +840,46 @@ local function ObserveUnit(unit)
 			btn.ClassBackground:SetTexture(color.r * 0.30, color.g * 0.30, color.b * 0.30, 1)
 			btn.HealthBar:SetVertexColor(color.r, color.g, color.b, 1)
 		end
+	end
+
+	-- Check Stealth/Invisibility Auras on observed unit
+	local foundStealth = nil
+	if C_UnitAuras and C_UnitAuras.GetAuraSlots and C_UnitAuras.GetAuraDataBySlot then
+		local slots = C_UnitAuras.GetAuraSlots(unit, "HELPFUL")
+		if slots then
+			for s = 1, #slots do
+				local aura = C_UnitAuras.GetAuraDataBySlot(unit, slots[s])
+				if aura then
+					if aura.name and STEALTH_NAMES[aura.name] then
+						foundStealth = STEALTH_NAMES[aura.name]
+						break
+					elseif aura.icon and STEALTH_TEXTURE_LOOKUP[aura.icon] then
+						local sName = STEALTH_TEXTURE_LOOKUP[aura.icon]
+						foundStealth = STEALTH_NAMES[sName]
+						break
+					end
+				end
+			end
+		end
+	else
+		for i = 1, 32 do
+			local tex, _, auraId = UnitBuff(unit, i)
+			if not tex then break end
+			if auraId and STEALTH_SPELLS[auraId] then
+				foundStealth = STEALTH_SPELLS[auraId]
+				break
+			elseif tex and STEALTH_TEXTURE_LOOKUP[tex] then
+				local sName = STEALTH_TEXTURE_LOOKUP[tex]
+				foundStealth = STEALTH_NAMES[sName]
+				break
+			end
+		end
+	end
+
+	if foundStealth then
+		SetUnitStealth(name, true, foundStealth.name, foundStealth.texture, foundStealth.duration)
+	elseif stealthedState[name] then
+		SetUnitStealth(name, false)
 	end
 
 	local hp, hpMax
@@ -696,6 +924,15 @@ function BGT:EnableConfigMode(size)
 		e.guid = nil
 		healthPct[e.name] = 100 - ((i * 7) % 85)
 		deadState[e.name] = false
+		if e.classToken == "ROGUE" then
+			stealthedState[e.name] = { isStealthed = true, spellName = "Stealth", texture = "Interface\\Icons\\Ability_Stealth" }
+		elseif e.classToken == "DRUID" and (i % 2 == 0) then
+			stealthedState[e.name] = { isStealthed = true, spellName = "Prowl", texture = "Interface\\Icons\\Ability_Druid_SupriseAttack" }
+		elseif i == 3 then
+			stealthedState[e.name] = { isStealthed = true, spellName = "Invisibility", texture = "Interface\\Icons\\Spell_Nature_Invisibilty" }
+		else
+			stealthedState[e.name] = nil
+		end
 	end
 	for i = currentSize + 1, MAX_ENEMIES do
 		local e = roster[i]
@@ -708,11 +945,14 @@ end
 
 function BGT:DisableConfigMode()
 	BGT.isConfig = false
+	wipe(stealthedState)
 	for i = 1, MAX_ENEMIES do
 		local btn = BGT.TargetButton[i]
 		if btn then
 			btn.targetName = nil
 			btn.targetGUID = nil
+			if btn.StealthIcon then btn.StealthIcon:Hide() end
+			if btn.StealthIconBg then btn.StealthIconBg:Hide() end
 			btn:Hide()
 		end
 	end
@@ -733,6 +973,9 @@ function BGT:CopySettings(sourceSize, destinationSize)
 	o.ButtonShowHealthText[destinationSize] = o.ButtonShowHealthText[sourceSize]
 	o.ButtonHideRealm[destinationSize] = o.ButtonHideRealm[sourceSize]
 	o.ButtonSortBy[destinationSize] = o.ButtonSortBy[sourceSize]
+	o.ShowStealthIcon[destinationSize] = o.ShowStealthIcon[sourceSize]
+	o.DimStealthed[destinationSize] = o.DimStealthed[sourceSize]
+	o.ShowStealthText[destinationSize] = o.ShowStealthText[sourceSize]
 	o.IndependentPositioning[destinationSize] = o.IndependentPositioning[sourceSize]
 end
 
@@ -761,6 +1004,12 @@ BGT:RegisterEvent("PLAYER_TARGET_CHANGED")
 BGT:RegisterEvent("PLAYER_FOCUS_CHANGED")
 BGT:RegisterEvent("NAME_PLATE_UNIT_ADDED")
 BGT:RegisterEvent("UNIT_NAME_UPDATE")
+BGT:RegisterEvent("UNIT_CASTEVENT")
+BGT:RegisterEvent("CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_BUFFS")
+BGT:RegisterEvent("CHAT_MSG_SPELL_HOSTILEPLAYER_BUFF")
+BGT:RegisterEvent("CHAT_MSG_SPELL_AURA_GONE_OTHER")
+BGT:RegisterEvent("CHAT_MSG_SPELL_HOSTILEPLAYER_DAMAGE")
+BGT:RegisterEvent("CHAT_MSG_COMBAT_HOSTILEPLAYER_HITS")
 
 BGT:SetScript("OnEvent", function()
 	if event == "PLAYER_LOGIN" then
@@ -795,6 +1044,100 @@ BGT:SetScript("OnEvent", function()
 
 	elseif event == "NAME_PLATE_UNIT_ADDED" or event == "UNIT_NAME_UPDATE" then
 		ObserveUnit(arg1)
+
+	elseif event == "UNIT_CASTEVENT" then
+		local casterGUID = arg1
+		local eventType = arg3
+		local spellId = arg4
+		if not casterGUID then return end
+
+		local rawName = UnitName(casterGUID) or guidToName[casterGUID]
+		if not rawName then return end
+		local name = nameToRow[rawName] and rawName or shortNameToFull[StripRealm(rawName)]
+		if not name then return end
+
+		guidToName[casterGUID] = name
+		nameToGUID[name] = casterGUID
+		local row = nameToRow[name]
+		if row and BGT.TargetButton[row] then
+			BGT.TargetButton[row].targetGUID = casterGUID
+		end
+
+		if eventType == "CAST" then
+			local isStealth, sName, sTex, sDur = CheckIsStealthSpell(spellId)
+			if isStealth then
+				SetUnitStealth(name, true, sName, sTex, sDur)
+			elseif stealthedState[name] then
+				SetUnitStealth(name, false)
+			end
+		elseif eventType == "START" or eventType == "CHANNEL" or eventType == "MAINHAND" or eventType == "OFFHAND" then
+			if stealthedState[name] then
+				SetUnitStealth(name, false)
+			end
+		end
+
+	elseif event == "CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_BUFFS" then
+		if arg1 then
+			local _, _, enemyName, buffName = string.find(arg1, "^(.-) gains (.-)%.$")
+			if enemyName and buffName and CheckIsStealthName(buffName) then
+				local name = nameToRow[enemyName] and enemyName or shortNameToFull[enemyName]
+				if name then
+					local data = STEALTH_NAMES[buffName]
+					SetUnitStealth(name, true, data.name, data.texture, data.duration)
+				end
+			end
+		end
+
+	elseif event == "CHAT_MSG_SPELL_HOSTILEPLAYER_BUFF" then
+		if arg1 then
+			local _, _, enemyName, spellName = string.find(arg1, "^(.-) casts (.-)%.$")
+			if not enemyName then
+				_, _, enemyName, spellName = string.find(arg1, "^(.-) performs (.-)%.$")
+			end
+			if enemyName and spellName and CheckIsStealthName(spellName) then
+				local name = nameToRow[enemyName] and enemyName or shortNameToFull[enemyName]
+				if name then
+					local data = STEALTH_NAMES[spellName]
+					SetUnitStealth(name, true, data.name, data.texture, data.duration)
+				end
+			end
+		end
+
+	elseif event == "CHAT_MSG_SPELL_AURA_GONE_OTHER" then
+		if arg1 then
+			local _, _, buffName, enemyName = string.find(arg1, "^(.-) fades from (.-)%.$")
+			if buffName and enemyName and CheckIsStealthName(buffName) then
+				local name = nameToRow[enemyName] and enemyName or shortNameToFull[enemyName]
+				if name and stealthedState[name] then
+					SetUnitStealth(name, false)
+				end
+			end
+		end
+
+	elseif event == "CHAT_MSG_SPELL_HOSTILEPLAYER_DAMAGE" then
+		if arg1 then
+			local _, _, enemyName = string.find(arg1, "^(.-)'s ")
+			if enemyName then
+				local name = nameToRow[enemyName] and enemyName or shortNameToFull[enemyName]
+				if name and stealthedState[name] then
+					SetUnitStealth(name, false)
+				end
+			end
+		end
+
+	elseif event == "CHAT_MSG_COMBAT_HOSTILEPLAYER_HITS" then
+		if arg1 then
+			local _, _, enemyName = string.find(arg1, "^(.-) hits ")
+			if not enemyName then _, _, enemyName = string.find(arg1, "^(.-) crits ") end
+			if not enemyName then _, _, enemyName = string.find(arg1, "^(.-) misses ") end
+			if not enemyName then _, _, enemyName = string.find(arg1, "^(.-) attacks%.") end
+			if enemyName then
+				local name = nameToRow[enemyName] and enemyName or shortNameToFull[enemyName]
+				if name and stealthedState[name] then
+					SetUnitStealth(name, false)
+				end
+			end
+		end
 	end
 end)
 

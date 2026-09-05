@@ -30,13 +30,14 @@ To run this modernized build, the following client extensions are strictly requi
 ## ⚔️ Key Features
 
 - **Pure Enemy Frames**: Displays the active enemy roster cleanly with class-colored health status bars, player names, and real-time health percentage numbers. All unneeded role/healer icons, range dropdowns, target count badges, and focus markers have been completely removed.
+- **Real-Time Stealth & Invisibility Detection**: Instantly detects and displays enemies entering or active in stealth/invisibility (*Stealth*, *Vanish*, *Prowl*, *Shadowmeld*, *Invisibility Potion*, *Lesser Invisibility Potion*, *Gnomish Cloaking Device*, *Smoke Cloud*). Features a crisp dedicated spell icon on the left edge of the row, subtle translucent row dimming (alpha 0.65), and optional stealth status tags, backed by SuperWoW's native C++ `UNIT_CASTEVENT`, ClassicAPI slot-batched aura inspection, and combat log telemetry. Automatically breaks when an enemy attacks, casts non-stealth abilities, takes damage, or dies.
 - **GUID-Aware Instant Targeting**: Left-click prioritizes SuperWoW's native C++ `TargetUnit(guid)` when observed, with instantaneous fallback to `TargetByName(name, true)` without combat lockdown restrictions or taint. Right-click sets focus via native `FocusUnit`.
 - **Nameplate Token Telemetry**: Automatically listens to ClassicAPI's `NAME_PLATE_UNIT_ADDED` events (`nameplate1..N`), capturing enemy GUIDs and real-time health as soon as opponents come within 3D view.
 - **Three Dedicated Battleground Brackets**:
   - **10 vs 10**: Warsong Gulch (supports optional FosterFrames sleek dark card styling).
   - **15 vs 15**: Arathi Basin and Eye of the Storm.
   - **40 vs 40**: Alterac Valley.
-- **Independent Layout Customization**: Separate text size, scale, width, height, and display toggles (Show Health Bar, Show Percent, Hide Realm, Class/Name sorting) for each bracket.
+- **Independent Layout Customization**: Separate text size, scale, width, height, and display toggles (Show Health Bar, Show Percent, Stealth Icon, Dim Stealthed, Stealth Tag, Hide Realm, Class/Name sorting) for each bracket.
 - **Zero-GC Active Sorting**: Fixed-size 40-slot array buffers sorted using an allocation-free insertion sort strictly over the active segment (`1..enemyCount`), eliminating Lua GC spikes during battlegrounds.
 - **Unified Parent Frame Hierarchy**: Rows are direct children of `BattlegroundTargets_MainFrame`, providing clean scale inheritance and zero-overhead mouse passthrough during combat (Rule C8).
 - **Modular Architecture (Rule H7)**: Core engine logic (`BattlegroundTargets.lua`) cleanly separated from the configuration interface (`BattlegroundTargetsOpt.lua`).
