@@ -23,6 +23,7 @@ for i = 1, MAX_SPY_ENEMIES do
 		name = nil,
 		shortName = nil,
 		classToken = nil,
+		race = nil,
 		level = nil,
 		healthPct = 100,
 		lastSeen = 0,
@@ -39,6 +40,7 @@ local guidToName = {}
 local hostileCache = {}
 local friendlyCache = {}
 local soundDebounce = {}
+local playerRaceCache = {}
 
 Spy.isTestMode = false
 
@@ -56,6 +58,142 @@ end
 
 local function GetPlayerFaction()
 	return UnitFactionGroup("player")
+end
+
+-- -------------------------------------------------------------------------- --
+-- Race & Class Formatting & Racial Detection Telemetry                       --
+-- -------------------------------------------------------------------------- --
+local CLASS_DISPLAY = {
+	["WARRIOR"] = "Warrior",
+	["PALADIN"] = "Paladin",
+	["HUNTER"] = "Hunter",
+	["ROGUE"] = "Rogue",
+	["PRIEST"] = "Priest",
+	["SHAMAN"] = "Shaman",
+	["MAGE"] = "Mage",
+	["WARLOCK"] = "Warlock",
+	["DRUID"] = "Druid",
+}
+
+local CANONICAL_RACES = {
+	["HUMAN"] = "Human",
+	["DWARF"] = "Dwarf",
+	["NIGHTELF"] = "Night Elf",
+	["NIGHT ELF"] = "Night Elf",
+	["GNOME"] = "Gnome",
+	["HIGHELF"] = "High Elf",
+	["HIGH ELF"] = "High Elf",
+	["ORC"] = "Orc",
+	["UNDEAD"] = "Undead",
+	["SCOURGE"] = "Undead",
+	["TAUREN"] = "Tauren",
+	["TROLL"] = "Troll",
+	["BLOODELF"] = "Blood Elf",
+	["BLOOD ELF"] = "Blood Elf",
+	["GOBLIN"] = "Goblin",
+}
+
+local RACIAL_SPELL_IDS = {
+	-- Night Elf
+	[20580] = "Night Elf", -- Shadowmeld
+	[2651] = "Night Elf",  -- Elune's Grace (Rank 1)
+	[10795] = "Night Elf", -- Elune's Grace (Rank 2)
+	[10796] = "Night Elf", -- Elune's Grace (Rank 3)
+	[10797] = "Night Elf", -- Starshards (Rank 1)
+	[19296] = "Night Elf", -- Starshards (Rank 2)
+	[19299] = "Night Elf", -- Starshards (Rank 3)
+	[19302] = "Night Elf", -- Starshards (Rank 4)
+	[19303] = "Night Elf", -- Starshards (Rank 5)
+	[19304] = "Night Elf", -- Starshards (Rank 6)
+	[19305] = "Night Elf", -- Starshards (Rank 7)
+
+	-- Dwarf
+	[20594] = "Dwarf",     -- Stoneform
+	[6346] = "Dwarf",      -- Fear Ward
+
+	-- Gnome
+	[20589] = "Gnome",     -- Escape Artist
+
+	-- Human
+	[20600] = "Human",     -- Perception
+	[10793] = "Human",     -- Feedback (Rank 1)
+	[19261] = "Human",     -- Feedback (Rank 2)
+	[19262] = "Human",     -- Feedback (Rank 3)
+	[19264] = "Human",     -- Feedback (Rank 4)
+	[19265] = "Human",     -- Feedback (Rank 5)
+
+	-- Undead
+	[7744] = "Undead",      -- Will of the Forsaken
+	[20577] = "Undead",     -- Cannibalize
+	[2652] = "Undead",      -- Touch of Weakness
+
+	-- Orc
+	[20572] = "Orc",         -- Blood Fury
+
+	-- Tauren
+	[20549] = "Tauren",      -- War Stomp
+
+	-- Troll
+	[20554] = "Troll",       -- Berserking
+	[26296] = "Troll",
+	[26297] = "Troll",
+	[9035] = "Troll",        -- Hex of Weakness
+}
+
+local RACIAL_SPELL_NAMES = {
+	["Shadowmeld"] = "Night Elf",
+	["Elune's Grace"] = "Night Elf",
+	["Starshards"] = "Night Elf",
+	["Stoneform"] = "Dwarf",
+	["Fear Ward"] = "Dwarf",
+	["Escape Artist"] = "Gnome",
+	["Perception"] = "Human",
+	["Feedback"] = "Human",
+	["Will of the Forsaken"] = "Undead",
+	["Cannibalize"] = "Undead",
+	["Blood Fury"] = "Orc",
+	["War Stomp"] = "Tauren",
+	["Berserking"] = "Troll",
+	["Hex of Weakness"] = "Troll",
+	["Touch of Weakness"] = "Undead",
+	["Arcane Flash"] = "High Elf",
+	["Meditation"] = "High Elf",
+}
+
+local function FormatRace(rawRace)
+	if not rawRace or rawRace == "" then return nil end
+	local upper = string.upper(rawRace)
+	if CANONICAL_RACES[upper] then
+		return CANONICAL_RACES[upper]
+	end
+	local stripped = string.gsub(upper, "%s+", "")
+	if CANONICAL_RACES[stripped] then
+		return CANONICAL_RACES[stripped]
+	end
+	return rawRace
+end
+
+local function FormatClass(rawClass)
+	if not rawClass or rawClass == "" then return nil end
+	local token = (BGT.ResolveClassToken and BGT.ResolveClassToken(rawClass)) or string.upper(rawClass)
+	return CLASS_DISPLAY[token] or token
+end
+
+local function InferRaceFromFactionAndClass(classToken)
+	if not classToken then return nil end
+	local pf = GetPlayerFaction()
+	if pf == "Horde" then
+		-- Enemy is Alliance: in 1.12.1 vanilla, Druids are 100% Night Elf
+		if classToken == "DRUID" then
+			return "Night Elf"
+		end
+	elseif pf == "Alliance" then
+		-- Enemy is Horde: Druids are 100% Tauren
+		if classToken == "DRUID" then
+			return "Tauren"
+		end
+	end
+	return nil
 end
 
 local function IsHostilePlayer(guid, name)
@@ -130,7 +268,7 @@ end
 -- -------------------------------------------------------------------------- --
 -- Record / Update Hostile Player Entry                                       --
 -- -------------------------------------------------------------------------- --
-function Spy:RecordEnemy(name, classToken, level, guid, healthPct, isStealth, stealthSpell)
+function Spy:RecordEnemy(name, classToken, level, guid, healthPct, isStealth, stealthSpell, race)
 	if not name or name == "" then return end
 	if friendlyCache[name] then return end
 
@@ -162,6 +300,29 @@ function Spy:RecordEnemy(name, classToken, level, guid, healthPct, isStealth, st
 	if classToken then
 		e.classToken = (BGT.ResolveClassToken and BGT.ResolveClassToken(classToken)) or classToken
 	end
+
+	-- Race Resolution Pipeline
+	if race then
+		race = FormatRace(race)
+	end
+	if not race and guid and UnitRace then
+		local r = UnitRace(guid)
+		if r and r ~= "" then
+			race = FormatRace(r)
+		end
+	end
+	if not race and playerRaceCache[name] then
+		race = playerRaceCache[name]
+	end
+	if not race and (e.classToken or classToken) then
+		race = InferRaceFromFactionAndClass(e.classToken or classToken)
+	end
+
+	if race then
+		playerRaceCache[name] = race
+		e.race = race
+	end
+
 	if level and level > 0 then e.level = level end
 	if guid then
 		e.guid = guid
@@ -223,6 +384,7 @@ function Spy:ClearHistory()
 		e.name = nil
 		e.shortName = nil
 		e.classToken = nil
+		e.race = nil
 		e.level = nil
 		e.healthPct = 100
 		e.lastSeen = 0
@@ -388,9 +550,24 @@ function Spy:CreateFrames()
 			GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
 			GameTooltip:ClearLines()
 			GameTooltip:AddLine(this.targetName, 1, 1, 1)
-			if this.targetClass then
-				GameTooltip:AddLine("Class: " .. this.targetClass, 0.8, 0.8, 0.8)
+
+			local race = this.targetRace or (playerRaceCache and playerRaceCache[this.targetName])
+			local cls = FormatClass(this.targetClass)
+			local raceClassText = nil
+
+			if race and cls then
+				raceClassText = race .. " " .. cls
+			elseif race then
+				raceClassText = race
+			elseif cls then
+				raceClassText = cls
 			end
+
+			if raceClassText then
+				local color = (BGT.GetClassColor and BGT.GetClassColor(this.targetClass)) or { r = 0.8, g = 0.8, b = 0.8 }
+				GameTooltip:AddLine(raceClassText, color.r, color.g, color.b)
+			end
+
 			if this.targetLevel and this.targetLevel > 0 then
 				GameTooltip:AddLine("Level: " .. this.targetLevel, 1, 0.82, 0)
 			end
@@ -489,6 +666,7 @@ function Spy:RenderRows()
 		row.targetName = data.name
 		row.targetGUID = data.guid
 		row.targetClass = data.classToken
+		row.targetRace = data.race or (data.name and playerRaceCache[data.name])
 		row.targetLevel = data.level
 		row.targetHealth = data.healthPct
 		row.targetStealth = data.isStealthed
@@ -578,8 +756,16 @@ local function OnSpyTick()
 				trackedEnemies[k], trackedEnemies[k + 1] = trackedEnemies[k + 1], trackedEnemies[k]
 			end
 			trackedEnemies[activeEnemyCount].name = nil
+			trackedEnemies[activeEnemyCount].shortName = nil
+			trackedEnemies[activeEnemyCount].classToken = nil
+			trackedEnemies[activeEnemyCount].race = nil
+			trackedEnemies[activeEnemyCount].level = nil
+			trackedEnemies[activeEnemyCount].healthPct = 100
+			trackedEnemies[activeEnemyCount].lastSeen = 0
 			trackedEnemies[activeEnemyCount].guid = nil
 			trackedEnemies[activeEnemyCount].isStealthed = false
+			trackedEnemies[activeEnemyCount].stealthSpell = nil
+			trackedEnemies[activeEnemyCount].wasStealthedAlerted = false
 			activeEnemyCount = activeEnemyCount - 1
 			changed = true
 		else
@@ -608,9 +794,9 @@ function Spy:EnableTestMode()
 	local now = GetTime()
 
 	local mock = {
-		{ name = "Shadowstalker-Realm", classToken = "ROGUE", level = 60, healthPct = 82, isStealthed = true, stealthSpell = "Stealth", lastSeen = now - 2 },
-		{ name = "Frostweaver-Realm", classToken = "MAGE", level = 60, healthPct = 100, isStealthed = false, lastSeen = now - 9 },
-		{ name = "Ironbreaker-Realm", classToken = "WARRIOR", level = 58, healthPct = 65, isStealthed = false, lastSeen = now - 22 },
+		{ name = "Shadowstalker-Realm", classToken = "ROGUE", race = "Night Elf", level = 60, healthPct = 82, isStealthed = true, stealthSpell = "Stealth", lastSeen = now - 2 },
+		{ name = "Frostweaver-Realm", classToken = "MAGE", race = "Gnome", level = 60, healthPct = 100, isStealthed = false, lastSeen = now - 9 },
+		{ name = "Ironbreaker-Realm", classToken = "WARRIOR", race = "Dwarf", level = 58, healthPct = 65, isStealthed = false, lastSeen = now - 22 },
 	}
 
 	for i = 1, 3 do
@@ -619,6 +805,7 @@ function Spy:EnableTestMode()
 		e.name = m.name
 		e.shortName = StripRealm(m.name)
 		e.classToken = m.classToken
+		e.race = m.race
 		e.level = m.level
 		e.healthPct = m.healthPct
 		e.isStealthed = m.isStealthed
@@ -693,6 +880,18 @@ eventFrame:SetScript("OnEvent", function()
 		local level = UnitLevel(casterGUID)
 		local isStealth = false
 		local sName = nil
+		local detectedRace = nil
+
+		if UnitRace then
+			local r = UnitRace(casterGUID)
+			if r and r ~= "" then
+				detectedRace = FormatRace(r)
+			end
+		end
+
+		if not detectedRace and spellId and RACIAL_SPELL_IDS[spellId] then
+			detectedRace = RACIAL_SPELL_IDS[spellId]
+		end
 
 		if eventType == "CAST" and BGT.CheckIsStealthSpell then
 			local isS, spell, tex = BGT.CheckIsStealthSpell(spellId)
@@ -702,8 +901,12 @@ eventFrame:SetScript("OnEvent", function()
 			end
 		end
 
+		if not detectedRace and sName and RACIAL_SPELL_NAMES[sName] then
+			detectedRace = RACIAL_SPELL_NAMES[sName]
+		end
+
 		if rawName then
-			Spy:RecordEnemy(rawName, classToken, level, casterGUID, nil, isStealth, sName)
+			Spy:RecordEnemy(rawName, classToken, level, casterGUID, nil, isStealth, sName, detectedRace)
 			if eventType == "START" or eventType == "CHANNEL" or eventType == "MAINHAND" or eventType == "OFFHAND" then
 				Spy:SetUnitStealthState(rawName, false)
 			end
@@ -721,6 +924,7 @@ eventFrame:SetScript("OnEvent", function()
 		local guid = UnitGUID(unit)
 		local _, classToken = UnitClass(unit)
 		local level = UnitLevel(unit)
+		local rawRace = UnitRace(unit)
 		local hp = UnitHealth(unit)
 		local maxHp = UnitHealthMax(unit)
 		local pct = 100
@@ -728,7 +932,7 @@ eventFrame:SetScript("OnEvent", function()
 			pct = math.floor((hp / maxHp) * 100 + 0.5)
 		end
 
-		Spy:RecordEnemy(name, classToken, level, guid, pct)
+		Spy:RecordEnemy(name, classToken, level, guid, pct, nil, nil, rawRace)
 
 	elseif event == "PLAYER_TARGET_CHANGED" or event == "UPDATE_MOUSEOVER_UNIT" or event == "PLAYER_FOCUS_CHANGED" then
 		local unit = event == "PLAYER_TARGET_CHANGED" and "target" or (event == "PLAYER_FOCUS_CHANGED" and "focus" or "mouseover")
@@ -739,13 +943,14 @@ eventFrame:SetScript("OnEvent", function()
 				local guid = UnitGUID(unit)
 				local _, classToken = UnitClass(unit)
 				local level = UnitLevel(unit)
+				local rawRace = UnitRace(unit)
 				local hp = UnitHealth(unit)
 				local maxHp = UnitHealthMax(unit)
 				local pct = 100
 				if maxHp and maxHp > 0 then
 					pct = math.floor((hp / maxHp) * 100 + 0.5)
 				end
-				Spy:RecordEnemy(name, classToken, level, guid, pct)
+				Spy:RecordEnemy(name, classToken, level, guid, pct, nil, nil, rawRace)
 			end
 		end
 
@@ -758,7 +963,8 @@ eventFrame:SetScript("OnEvent", function()
 			if enemyName and spellName then
 				hostileCache[enemyName] = true
 				local isStealth = BGT.CheckIsStealthName and BGT.CheckIsStealthName(spellName)
-				Spy:RecordEnemy(enemyName, nil, nil, nil, nil, isStealth and true or false, spellName)
+				local detectedRace = RACIAL_SPELL_NAMES[spellName]
+				Spy:RecordEnemy(enemyName, nil, nil, nil, nil, isStealth and true or false, spellName, detectedRace)
 			end
 		end
 
@@ -768,7 +974,8 @@ eventFrame:SetScript("OnEvent", function()
 			if enemyName and buffName then
 				hostileCache[enemyName] = true
 				local isStealth = BGT.CheckIsStealthName and BGT.CheckIsStealthName(buffName)
-				Spy:RecordEnemy(enemyName, nil, nil, nil, nil, isStealth and true or false, buffName)
+				local detectedRace = RACIAL_SPELL_NAMES[buffName]
+				Spy:RecordEnemy(enemyName, nil, nil, nil, nil, isStealth and true or false, buffName, detectedRace)
 			end
 		end
 
