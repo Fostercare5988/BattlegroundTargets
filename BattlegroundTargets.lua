@@ -256,6 +256,46 @@ local function SortActiveRoster(comparator)
 	end
 end
 
+-- Roster delta-detection buffers (fixed 1..MAX_ENEMIES, zero GC allocation)
+local prevEnemyCount = -1
+local prevSortBy = -1
+local prevEnemyNames = {}
+local prevEnemyClasses = {}
+for i = 1, MAX_ENEMIES do
+	prevEnemyNames[i] = ""
+	prevEnemyClasses[i] = ""
+end
+
+local function HasRosterChanged()
+	local sortBy = (BattlegroundTargets_Options and BattlegroundTargets_Options.ButtonSortBy and BattlegroundTargets_Options.ButtonSortBy[currentSize]) or 1
+	if sortBy ~= prevSortBy then return true end
+	if enemyCount ~= prevEnemyCount then return true end
+	for i = 1, enemyCount do
+		if roster[i].name ~= prevEnemyNames[i] or roster[i].classToken ~= prevEnemyClasses[i] then
+			return true
+		end
+	end
+	return false
+end
+
+local function SaveRosterSnapshot()
+	prevSortBy = (BattlegroundTargets_Options and BattlegroundTargets_Options.ButtonSortBy and BattlegroundTargets_Options.ButtonSortBy[currentSize]) or 1
+	prevEnemyCount = enemyCount
+	for i = 1, enemyCount do
+		prevEnemyNames[i] = roster[i].name or ""
+		prevEnemyClasses[i] = roster[i].classToken or ""
+	end
+	for i = enemyCount + 1, MAX_ENEMIES do
+		prevEnemyNames[i] = ""
+		prevEnemyClasses[i] = ""
+	end
+end
+
+function BGT:InvalidateRosterCache()
+	prevEnemyCount = -1
+	prevSortBy = -1
+end
+
 function BGT:EnsureOptions()
 	if type(BattlegroundTargets_Options) ~= "table" then
 		BattlegroundTargets_Options = {}
@@ -765,12 +805,13 @@ local function RenderRoster()
 end
 BGT.RenderRoster = RenderRoster
 
-function BGT:BattlefieldScoreUpdate()
+function BGT:BattlefieldScoreUpdate(force)
 	if BGT.isConfig then return end
 
 	local inBG, bgName = DetectBattleground()
 	if not inBG then
 		activeBG = false
+		prevEnemyCount = -1
 		wipe(stealthedState)
 		wipe(guidToName)
 		BGT.MainFrame:Hide()
@@ -780,6 +821,7 @@ function BGT:BattlefieldScoreUpdate()
 
 	local size = GetBracketSize(bgName)
 	if size ~= currentSize then
+		prevEnemyCount = -1
 		BGT:SetupButtonLayout(size)
 	end
 
@@ -817,6 +859,9 @@ function BGT:BattlefieldScoreUpdate()
 	else
 		SortActiveRoster(ClassThenNameSort)
 	end
+
+	if not force and not HasRosterChanged() then return end
+	SaveRosterSnapshot()
 
 	RenderRoster()
 end
@@ -921,6 +966,7 @@ end
 
 function BGT:EnableConfigMode(size)
 	BGT.isConfig = true
+	prevEnemyCount = -1
 	currentSize = size or currentSize
 	BGT.currentSize = currentSize
 	BGT:CreateFrames()
@@ -956,6 +1002,7 @@ end
 
 function BGT:DisableConfigMode()
 	BGT.isConfig = false
+	prevEnemyCount = -1
 	wipe(stealthedState)
 	for i = 1, MAX_ENEMIES do
 		local btn = BGT.TargetButton[i]
@@ -968,7 +1015,7 @@ function BGT:DisableConfigMode()
 		end
 	end
 	if activeBG then
-		BGT:BattlefieldScoreUpdate()
+		BGT:BattlefieldScoreUpdate(true)
 	else
 		BGT.MainFrame:Hide()
 	end
@@ -1006,6 +1053,7 @@ end
 BGT:RegisterEvent("PLAYER_LOGIN")
 BGT:RegisterEvent("PLAYER_ENTERING_WORLD")
 BGT:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+BGT:RegisterEvent("UPDATE_BATTLEFIELD_STATUS")
 BGT:RegisterEvent("UPDATE_BATTLEFIELD_SCORE")
 BGT:RegisterEvent("UNIT_HEALTH")
 BGT:RegisterEvent("UNIT_HEALTH_FREQUENT")
@@ -1029,7 +1077,8 @@ BGT:SetScript("OnEvent", function()
 		BGT:SetupButtonLayout(currentSize)
 		if BGT.CreateMinimapButton then BGT:CreateMinimapButton() end
 
-	elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+	elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" or event == "UPDATE_BATTLEFIELD_STATUS" then
+		prevEnemyCount = -1
 		RequestBattlefieldScoreData()
 		BGT:BattlefieldScoreUpdate()
 
@@ -1151,6 +1200,20 @@ BGT:SetScript("OnEvent", function()
 		end
 	end
 end)
+
+-- -------------------------------------------------------------------------- --
+-- Periodic Scoreboard Poller (Hardware C_Timer.NewTicker, 3.0s cadence)      --
+-- Strictly gated by activeBG; zero allocations, zero DOM redraws on delta 0. --
+-- -------------------------------------------------------------------------- --
+local function AutoScoreboardTicker()
+	if activeBG and not BGT.isConfig then
+		RequestBattlefieldScoreData()
+	end
+end
+
+if C_Timer and C_Timer.NewTicker then
+	C_Timer.NewTicker(3.0, AutoScoreboardTicker)
+end
 
 SLASH_BATTLEGROUNDTARGETS1 = "/bgt"
 SLASH_BATTLEGROUNDTARGETS2 = "/battlegroundtargets"
