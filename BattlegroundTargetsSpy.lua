@@ -5,7 +5,12 @@
 -- -------------------------------------------------------------------------- --
 
 -- Strict Engine Dependency Guard (Mandatory ClassicAPI v1.13.4+ & SuperWoW v2.2+)
-if not (CLASSIC_API_VERSION and SUPERWOW_VERSION) then return end
+local MIN_CLASSIC_API = 11304
+
+if not (CLASSIC_API_VERSION and SUPERWOW_VERSION) or 
+   (type(CLASSIC_API_VERSION) == "number" and CLASSIC_API_VERSION < MIN_CLASSIC_API) then
+	return
+end
 
 BattlegroundTargets.Spy = BattlegroundTargets.Spy or {}
 local Spy = BattlegroundTargets.Spy
@@ -403,9 +408,7 @@ end
 -- -------------------------------------------------------------------------- --
 local function FormatElapsedTime(lastSeen, now)
 	local diff = math.max(0, math.floor(now - lastSeen))
-	if diff < 5 then
-		return "Just now"
-	elseif diff < 60 then
+	if diff < 60 then
 		return diff .. "s"
 	else
 		local mins = math.floor(diff / 60)
@@ -420,7 +423,7 @@ function Spy:CreateFrames()
 	if Spy.Frame then return end
 
 	local f = CreateFrame("Frame", "BattlegroundTargets_SpyFrame", UIParent)
-	f:SetWidth(180)
+	f:SetWidth(185)
 	f:SetHeight(40)
 	f:SetMovable(true)
 	f:EnableMouse(true)
@@ -465,7 +468,7 @@ function Spy:CreateFrames()
 	f.rows = {}
 	for i = 1, MAX_SPY_ROWS do
 		local btn = CreateFrame("Button", "BattlegroundTargets_SpyRow" .. i, f)
-		btn:SetWidth(170)
+		btn:SetWidth(175)
 		btn:SetHeight(20)
 		btn:SetPoint("TOPLEFT", f, "TOPLEFT", 5, -20 - (i - 1) * 21)
 
@@ -497,26 +500,26 @@ function Spy:CreateFrames()
 		lvl:SetTextColor(1, 0.82, 0)
 		btn.LevelText = lvl
 
-		-- Name Text
-		local nameText = btn:CreateFontString(nil, "OVERLAY")
-		nameText:SetFont(FONT, 10, "OUTLINE")
-		nameText:SetPoint("LEFT", lvl, "RIGHT", 3, 0)
-		nameText:SetPoint("RIGHT", btn, "RIGHT", -46, 0)
-		nameText:SetJustifyH("LEFT")
-		btn.NameText = nameText
-
-		-- State Tag (e.g. STEALTH, 95%)
-		local tag = btn:CreateFontString(nil, "OVERLAY")
-		tag:SetFont(FONT, 8, "OUTLINE")
-		tag:SetPoint("RIGHT", btn, "RIGHT", -26, 0)
-		btn.TagText = tag
-
-		-- Elapsed Time Text
+		-- Elapsed Time Text (anchored to row right border)
 		local timeText = btn:CreateFontString(nil, "OVERLAY")
 		timeText:SetFont(FONT, 8, "OUTLINE")
 		timeText:SetPoint("RIGHT", btn, "RIGHT", -3, 0)
 		timeText:SetTextColor(0.8, 0.8, 0.8)
 		btn.TimeText = timeText
+
+		-- State Tag (e.g. STEALTH, 95% - chained to the left of timeText, eliminating AP-14 overlap)
+		local tag = btn:CreateFontString(nil, "OVERLAY")
+		tag:SetFont(FONT, 8, "OUTLINE")
+		tag:SetPoint("RIGHT", timeText, "LEFT", -3, 0)
+		btn.TagText = tag
+
+		-- Name Text (bounded between level and tag with clean truncation)
+		local nameText = btn:CreateFontString(nil, "OVERLAY")
+		nameText:SetFont(FONT, 10, "OUTLINE")
+		nameText:SetPoint("LEFT", lvl, "RIGHT", 3, 0)
+		nameText:SetPoint("RIGHT", tag, "LEFT", -3, 0)
+		nameText:SetJustifyH("LEFT")
+		btn.NameText = nameText
 
 		-- Disable mouse on all child textures/fontstrings (Rule C8)
 		-- Enable mouse exclusively on parent row with left/right click (Rule C5)
@@ -577,6 +580,10 @@ function Spy:CreateFrames()
 			end
 			if this.targetStealth then
 				GameTooltip:AddLine("State: STEALTHED (" .. (this.targetStealthSpell or "Stealth") .. ")", 0.4, 0.6, 1)
+			end
+			if this.targetLastSeen and this.targetLastSeen > 0 then
+				local diff = math.max(0, math.floor(GetTime() - this.targetLastSeen))
+				GameTooltip:AddLine("Last Seen: " .. (diff < 60 and (diff .. "s ago") or (math.floor(diff / 60) .. "m ago")), 0.7, 0.7, 0.7)
 			end
 			GameTooltip:AddLine("Left-Click: Target  |  Right-Click: Focus", 0.5, 0.5, 0.5)
 			GameTooltip:Show()
@@ -672,6 +679,7 @@ function Spy:RenderRows()
 		row.targetHealth = data.healthPct
 		row.targetStealth = data.isStealthed
 		row.targetStealthSpell = data.stealthSpell
+		row.targetLastSeen = data.lastSeen
 
 		-- Class color
 		local color = (BGT.GetClassColor and BGT.GetClassColor(data.classToken)) or { r = 0.6, g = 0.6, b = 0.6 }

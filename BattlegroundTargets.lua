@@ -5,12 +5,15 @@
 -- -------------------------------------------------------------------------- --
 
 -- Strict Engine Dependency Guard (Mandatory ClassicAPI v1.13.4+ & SuperWoW v2.2+)
-if not (CLASSIC_API_VERSION and SUPERWOW_VERSION) then
-	DEFAULT_CHAT_FRAME:AddMessage("|cffff2020[Fatal Error]|r BattlegroundTargets requires ClassicAPI.dll (v1.13.4+) & SuperWoW (v2.2+)! Please ensure both DLLs are loaded.", 1, 0.2, 0.2)
+local MIN_CLASSIC_API = 11304
+
+if not (CLASSIC_API_VERSION and SUPERWOW_VERSION) or 
+   (type(CLASSIC_API_VERSION) == "number" and CLASSIC_API_VERSION < MIN_CLASSIC_API) then
+	DEFAULT_CHAT_FRAME:AddMessage("|cffff2020[Fatal Error]|r BattlegroundTargets requires ClassicAPI (v1.13.4+) & SuperWoW (v2.2+)! Please ensure both DLLs are loaded.", 1, 0.2, 0.2)
 	return
 end
 
-local MOD_VERSION = "3.2.0"
+local MOD_VERSION = "3.3.0"
 local MAX_ENEMIES = 40
 local BRACKETS = { 10, 15, 40 }
 local FONT = "Fonts\\FRIZQT__.TTF"

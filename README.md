@@ -1,13 +1,14 @@
 # BattlegroundTargets (World of Warcraft 1.12.1 Enhanced)
 
 [![Client](https://img.shields.io/badge/Client-1.12.1%20Vanilla-blue.svg)](#)
+[![Engine](https://img.shields.io/badge/Engine-Enhanced%201.12.1-brightgreen.svg)](#)
+[![Version](https://img.shields.io/badge/Version-v3.3.0-blue.svg)](#)
 [![ClassicAPI](https://img.shields.io/badge/ClassicAPI-v1.13.4+-orange.svg)](#)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-v2.2+-brightgreen.svg)](#)
-[![UnitXP](https://img.shields.io/badge/UnitXP_SP3-v90+-purple.svg)](#)
 [![DXVK](https://img.shields.io/badge/DXVK-Vulkan-red.svg)](#)
 [![License](https://img.shields.io/badge/License-GPLv2-yellow.svg)](#)
 
-**BattlegroundTargets** is a high-performance Enemy Unit Frame addon for World of Warcraft 1.12.1 battlegrounds (Warsong Gulch, Arathi Basin / Eye of the Storm, Alterac Valley).
+**BattlegroundTargets** is a high-performance Enemy Unit Frame addon for World of Warcraft 1.12.1 battlegrounds (Warsong Gulch, Arathi Basin / Thorn Gorge, Alterac Valley).
 
 Engineered specifically for the Enhanced 1.12.1 Client, this version strips away all legacy 2006 bloat, combat-log guessing heuristics, range calculations, and role overlays, focusing exclusively on delivering rock-solid, ultra-fast **Enemy Unit Frames** in three dedicated battleground bracket formats.
 
@@ -37,7 +38,7 @@ To run this modernized build, the following client extensions are strictly requi
 - **Nameplate Token Telemetry**: Automatically listens to ClassicAPI's `NAME_PLATE_UNIT_ADDED` events (`nameplate1..N`), capturing enemy GUIDs and real-time health as soon as opponents come within 3D view.
 - **Three Dedicated Battleground Brackets**:
   - **10 vs 10**: Warsong Gulch.
-  - **15 vs 15**: Arathi Basin and Eye of the Storm.
+  - **15 vs 15**: Arathi Basin and Thorn Gorge.
   - **40 vs 40**: Alterac Valley.
 - **Independent Layout Customization**: Separate text size, scale, width, height, and display toggles (Show Health Bar, Show Percent, Stealth Icon, Dim Stealthed, Stealth Tag, Hide Realm, Class/Name sorting) for each bracket, plus a dedicated "Spy" tab for open-world settings.
 - **Zero-GC Active Sorting**: Fixed-size 40-slot array buffers sorted using an allocation-free insertion sort strictly over the active segment (`1..enemyCount`), eliminating Lua GC spikes during battlegrounds.
