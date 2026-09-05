@@ -289,8 +289,18 @@ function BGT:EnsureOptions()
 		if o.ButtonHideRealm[size] == nil then o.ButtonHideRealm[size] = false end
 		if o.ButtonSortBy[size] == nil then o.ButtonSortBy[size] = 1 end
 		if o.ShowStealthIcon[size] == nil then o.ShowStealthIcon[size] = true end
-		if o.DimStealthed[size] == nil then o.DimStealthed[size] = true end
-		if o.ShowStealthText[size] == nil then o.ShowStealthText[size] = false end
+		if o.DimStealthed[size] == nil then o.DimStealthed[size] = false end
+		if o.ShowStealthText[size] == nil then o.ShowStealthText[size] = true end
+	end
+
+	-- One-time migration for users updating to the improved stealth visibility defaults
+	if not o.StealthDefaultsV2 then
+		o.StealthDefaultsV2 = true
+		for _, size in ipairs(BRACKETS) do
+			o.ShowStealthIcon[size] = true
+			o.DimStealthed[size] = false
+			o.ShowStealthText[size] = true
+		end
 	end
 
 	if o.MinimapButton == nil then o.MinimapButton = true end
@@ -308,8 +318,9 @@ local function UpdateRowStealthVisual(index, name)
 	local dead = deadState[name]
 	local height = o.ButtonHeight[size] or 20
 
-	if stealth and not dead and o.ShowStealthIcon[size] then
+	if stealth and not dead and (o.ShowStealthIcon[size] ~= false) then
 		btn.StealthIcon:SetTexture(stealth.texture or "Interface\\Icons\\Ability_Stealth")
+		btn.StealthIcon:SetVertexColor(1, 1, 1, 1)
 		btn.StealthIcon:Show()
 		btn.StealthIconBg:Show()
 		btn.Name:SetPoint("LEFT", btn, "LEFT", height + 1, 0)
@@ -322,12 +333,12 @@ local function UpdateRowStealthVisual(index, name)
 	if dead then
 		btn:SetAlpha(0.55)
 	elseif stealth and o.DimStealthed[size] then
-		btn:SetAlpha(0.65)
+		btn:SetAlpha(0.75)
 	else
 		btn:SetAlpha(1.0)
 	end
 
-	if stealth and not dead and o.ShowStealthText[size] then
+	if stealth and not dead and (o.ShowStealthText[size] ~= false) then
 		local sName = stealth.spellName or "Stealth"
 		local tag = (sName == "Prowl" and "|cffb0b0ffPROWL|r")
 			or (sName == "Shadowmeld" and "|cff9090ffMELD|r")

@@ -208,7 +208,7 @@ function BGT:CreateOptionsFrame()
 	end)
 	bp.DimStealthed:SetPoint("LEFT", bp.ShowStealthIcon.Label, "RIGHT", 14, 0)
 
-	bp.ShowStealthText = CreateCheckButton("BGTOpt_ShowStealthText", bp, "Stealth Tag", function()
+	bp.ShowStealthText = CreateCheckButton("BGTOpt_ShowStealthText", bp, "Stealth Text", function()
 		local opt = BattlegroundTargets_Options
 		opt.ShowStealthText[selectedTab] = this:GetChecked() and true or false
 		if BGT.isConfig and BGT.RenderRoster then BGT:RenderRoster() end
