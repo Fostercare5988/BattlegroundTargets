@@ -1153,46 +1153,51 @@ BGT:RegisterEvent("CHAT_MSG_SPELL_AURA_GONE_OTHER")
 BGT:RegisterEvent("CHAT_MSG_SPELL_HOSTILEPLAYER_DAMAGE")
 BGT:RegisterEvent("CHAT_MSG_COMBAT_HOSTILEPLAYER_HITS")
 
-local function BGT_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
-	event = event or event
-	if event == "PLAYER_LOGIN" then
+local function BGT_OnEvent(arg1_param, arg2_param, arg3_param, arg4_param, arg5_param)
+	local ev = (type(arg1_param) == "string" and arg1_param) or arg2_param or event
+	local a1 = (type(arg1_param) == "string" and (arg2_param or arg1)) or arg3_param or arg1
+	local a2 = (type(arg1_param) == "string" and (arg3_param or arg2)) or arg4_param or arg2
+	local a3 = (type(arg1_param) == "string" and (arg4_param or arg3)) or arg5_param or arg3
+	local a4 = (type(arg1_param) == "string" and arg5_param) or arg4
+
+	if ev == "PLAYER_LOGIN" then
 		BGT:EnsureOptions()
 		BGT:CreateFrames()
 		BGT:SetupButtonLayout(currentSize)
 		if BGT.CreateMinimapButton then BGT:CreateMinimapButton() end
 
-	elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" or event == "UPDATE_BATTLEFIELD_STATUS" then
+	elseif ev == "PLAYER_ENTERING_WORLD" or ev == "ZONE_CHANGED_NEW_AREA" or ev == "UPDATE_BATTLEFIELD_STATUS" then
 		prevEnemyCount = -1
 		RequestBattlefieldScoreData()
 		BGT:BattlefieldScoreUpdate()
 
-	elseif event == "UPDATE_BATTLEFIELD_SCORE" then
+	elseif ev == "UPDATE_BATTLEFIELD_SCORE" then
 		BGT:BattlefieldScoreUpdate()
 
-	elseif event == "UNIT_HEALTH" or event == "UNIT_HEALTH_FREQUENT" then
-		ObserveUnit(arg1)
+	elseif ev == "UNIT_HEALTH" or ev == "UNIT_HEALTH_FREQUENT" then
+		ObserveUnit(a1)
 
-	elseif event == "UNIT_TARGET" then
-		if arg1 then ObserveUnit(GetUnitTargetToken(arg1)) end
+	elseif ev == "UNIT_TARGET" then
+		if a1 then ObserveUnit(GetUnitTargetToken(a1)) end
 
-	elseif event == "UPDATE_MOUSEOVER_UNIT" then
+	elseif ev == "UPDATE_MOUSEOVER_UNIT" then
 		ObserveUnit("mouseover")
 
-	elseif event == "PLAYER_TARGET_CHANGED" then
+	elseif ev == "PLAYER_TARGET_CHANGED" then
 		ObserveUnit("target")
 		UpdateAllSelectionVisuals()
 
-	elseif event == "PLAYER_FOCUS_CHANGED" then
+	elseif ev == "PLAYER_FOCUS_CHANGED" then
 		ObserveUnit("focus")
 		UpdateAllSelectionVisuals()
 
-	elseif event == "NAME_PLATE_UNIT_ADDED" or event == "UNIT_NAME_UPDATE" then
-		ObserveUnit(arg1)
+	elseif ev == "NAME_PLATE_UNIT_ADDED" or ev == "UNIT_NAME_UPDATE" then
+		ObserveUnit(a1)
 
-	elseif event == "UNIT_CASTEVENT" then
-		local casterGUID = arg1
-		local eventType = arg3
-		local spellId = arg4
+	elseif ev == "UNIT_CASTEVENT" then
+		local casterGUID = a1
+		local eventType = a3
+		local spellId = a4
 		if not casterGUID then return end
 
 		local rawName = UnitName(casterGUID) or guidToName[casterGUID]
@@ -1220,9 +1225,9 @@ local function BGT_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7
 			end
 		end
 
-	elseif event == "CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_BUFFS" then
-		if arg1 then
-			local _, _, enemyName, buffName = string.find(arg1, "^(.-) gains (.-)%.$")
+	elseif ev == "CHAT_MSG_SPELL_PERIODIC_HOSTILEPLAYER_BUFFS" then
+		if a1 then
+			local _, _, enemyName, buffName = string.find(a1, "^(.-) gains (.-)%.$")
 			if enemyName and buffName and CheckIsStealthName(buffName) then
 				local name = nameToRow[enemyName] and enemyName or shortNameToFull[enemyName]
 				if name then
@@ -1232,11 +1237,11 @@ local function BGT_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7
 			end
 		end
 
-	elseif event == "CHAT_MSG_SPELL_HOSTILEPLAYER_BUFF" then
-		if arg1 then
-			local _, _, enemyName, spellName = string.find(arg1, "^(.-) casts (.-)%.$")
+	elseif ev == "CHAT_MSG_SPELL_HOSTILEPLAYER_BUFF" then
+		if a1 then
+			local _, _, enemyName, spellName = string.find(a1, "^(.-) casts (.-)%.$")
 			if not enemyName then
-				_, _, enemyName, spellName = string.find(arg1, "^(.-) performs (.-)%.$")
+				_, _, enemyName, spellName = string.find(a1, "^(.-) performs (.-)%.$")
 			end
 			if enemyName and spellName and CheckIsStealthName(spellName) then
 				local name = nameToRow[enemyName] and enemyName or shortNameToFull[enemyName]
@@ -1247,9 +1252,9 @@ local function BGT_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7
 			end
 		end
 
-	elseif event == "CHAT_MSG_SPELL_AURA_GONE_OTHER" then
-		if arg1 then
-			local _, _, buffName, enemyName = string.find(arg1, "^(.-) fades from (.-)%.$")
+	elseif ev == "CHAT_MSG_SPELL_AURA_GONE_OTHER" then
+		if a1 then
+			local _, _, buffName, enemyName = string.find(a1, "^(.-) fades from (.-)%.$")
 			if buffName and enemyName and CheckIsStealthName(buffName) then
 				local name = nameToRow[enemyName] and enemyName or shortNameToFull[enemyName]
 				if name and stealthedState[name] then
@@ -1258,9 +1263,9 @@ local function BGT_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7
 			end
 		end
 
-	elseif event == "CHAT_MSG_SPELL_HOSTILEPLAYER_DAMAGE" then
-		if arg1 then
-			local _, _, enemyName = string.find(arg1, "^(.-)'s ")
+	elseif ev == "CHAT_MSG_SPELL_HOSTILEPLAYER_DAMAGE" then
+		if a1 then
+			local _, _, enemyName = string.find(a1, "^(.-)'s ")
 			if enemyName then
 				local name = nameToRow[enemyName] and enemyName or shortNameToFull[enemyName]
 				if name and stealthedState[name] then
@@ -1269,12 +1274,12 @@ local function BGT_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7
 			end
 		end
 
-	elseif event == "CHAT_MSG_COMBAT_HOSTILEPLAYER_HITS" then
-		if arg1 then
-			local _, _, enemyName = string.find(arg1, "^(.-) hits ")
-			if not enemyName then _, _, enemyName = string.find(arg1, "^(.-) crits ") end
-			if not enemyName then _, _, enemyName = string.find(arg1, "^(.-) misses ") end
-			if not enemyName then _, _, enemyName = string.find(arg1, "^(.-) attacks%.") end
+	elseif ev == "CHAT_MSG_COMBAT_HOSTILEPLAYER_HITS" then
+		if a1 then
+			local _, _, enemyName = string.find(a1, "^(.-) hits ")
+			if not enemyName then _, _, enemyName = string.find(a1, "^(.-) crits ") end
+			if not enemyName then _, _, enemyName = string.find(a1, "^(.-) misses ") end
+			if not enemyName then _, _, enemyName = string.find(a1, "^(.-) attacks%.") end
 			if enemyName then
 				local name = nameToRow[enemyName] and enemyName or shortNameToFull[enemyName]
 				if name and stealthedState[name] then
