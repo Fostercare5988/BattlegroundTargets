@@ -13,7 +13,7 @@ if not (CLASSIC_API_VERSION and SUPERWOW_VERSION) or
 	return
 end
 
-local MOD_VERSION = "3.3.0"
+local MOD_VERSION = "3.4.0"
 local MAX_ENEMIES = 40
 local BRACKETS = { 10, 15, 40 }
 local FONT = "Fonts\\FRIZQT__.TTF"
@@ -94,6 +94,36 @@ local deadState = {}
 local stealthedState = {}
 
 local wipe = table.wipe
+
+-- Telemetry caching & unit target fast lookup
+local UNIT_TARGET_CACHE = {
+	player = "playertarget",
+	target = "targettarget",
+	focus = "focustarget",
+	mouseover = "mouseovertarget",
+	party1 = "party1target",
+	party2 = "party2target",
+	party3 = "party3target",
+	party4 = "party4target",
+}
+for i = 1, 40 do
+	UNIT_TARGET_CACHE["raid" .. i] = "raid" .. i .. "target"
+end
+
+local function GetUnitTargetToken(unit)
+	if not unit then return nil end
+	local cached = UNIT_TARGET_CACHE[unit]
+	if not cached then
+		cached = unit .. "target"
+		UNIT_TARGET_CACHE[unit] = cached
+	end
+	return cached
+end
+
+-- Consolidated UnitXP telemetry pair query
+local function GetUnitXPHealthPair(unit)
+	return UnitXP("health", unit), UnitXP("maxhealth", unit)
+end
 
 local STEALTH_SPELLS = {
 	-- Rogue Stealth
@@ -376,36 +406,91 @@ local function UpdateRowStealthVisual(index, name)
 	end
 end
 
-local function SetUnitStealth(name, isStealthed, spellName, texture, duration)
+-- Stealth entry pool & zero-allocation timer watcher
+local stealthEntryPool = {}
+local function ReleaseStealthEntry(entry)
+	if not entry then return end
+	entry.isStealthed = false
+	entry.spellName = nil
+	entry.texture = nil
+	entry.expireTime = nil
+	table.insert(stealthEntryPool, entry)
+end
+
+local function AcquireStealthEntry()
+	local entry = table.remove(stealthEntryPool)
+	if not entry then
+		entry = { isStealthed = false, spellName = nil, texture = nil, expireTime = nil }
+	end
+	return entry
+end
+
+local SetUnitStealth -- forward declaration
+
+local stealthWatcher = CreateFrame("Frame", "BattlegroundTargets_StealthWatcher", UIParent)
+stealthWatcher:Hide()
+local stealthWatcherElapsed = 0
+
+local function StealthWatcher_OnUpdate(self, elapsed)
+	stealthWatcherElapsed = stealthWatcherElapsed + (elapsed or 0)
+	if stealthWatcherElapsed < 0.25 then return end
+	stealthWatcherElapsed = 0
+
+	local now = GetTime()
+	local hasExpiring = false
+	for name, entry in pairs(stealthedState) do
+		if entry and entry.expireTime then
+			if now >= entry.expireTime then
+				SetUnitStealth(name, false)
+			else
+				hasExpiring = true
+			end
+		end
+	end
+	if not hasExpiring then
+		self:Hide()
+	end
+end
+stealthWatcher:SetScript("OnUpdate", StealthWatcher_OnUpdate)
+
+SetUnitStealth = function(name, isStealthed, spellName, texture, duration)
 	if not name then return end
 	if isStealthed then
 		local entry = stealthedState[name]
 		if not entry then
-			entry = {}
+			entry = AcquireStealthEntry()
 			stealthedState[name] = entry
 		end
 		entry.isStealthed = true
 		entry.spellName = spellName or "Stealth"
 		entry.texture = texture or "Interface\\Icons\\Ability_Stealth"
-		entry.expireTime = (duration and duration > 0) and (GetTime() + duration) or nil
+		local exp = (duration and duration > 0) and (GetTime() + duration + 0.5) or nil
+		entry.expireTime = exp
 
-		if duration and duration > 0 and C_Timer and C_Timer.After then
-			C_Timer.After(duration + 0.5, function()
-				local cur = stealthedState[name]
-				if cur and cur.expireTime and GetTime() >= cur.expireTime then
-					SetUnitStealth(name, false)
-				end
-			end)
+		if exp and stealthWatcher and not stealthWatcher:IsShown() then
+			stealthWatcher:Show()
 		end
 	else
-		if stealthedState[name] then
+		local entry = stealthedState[name]
+		if entry then
 			stealthedState[name] = nil
+			ReleaseStealthEntry(entry)
 		end
 	end
 
 	local row = nameToRow[name]
 	if row then
 		UpdateRowStealthVisual(row, name)
+	end
+end
+
+local function ClearAllStealth()
+	for name, entry in pairs(stealthedState) do
+		ReleaseStealthEntry(entry)
+		stealthedState[name] = nil
+	end
+	if stealthWatcher then
+		stealthWatcher:Hide()
 	end
 end
 
@@ -451,6 +536,57 @@ local function UpdateAllSelectionVisuals()
 	end
 end
 
+local function MainFrame_OnMouseDown(self)
+	local f = self or this or (BGT and BGT.MainFrame)
+	if BGT.isConfig and f and f.StartMoving then
+		f:StartMoving()
+	end
+end
+
+local function MainFrame_OnMouseUp(self)
+	local f = self or this or (BGT and BGT.MainFrame)
+	if f and f.StopMovingOrSizing then
+		f:StopMovingOrSizing()
+	end
+	BGT:Frame_SavePosition("BattlegroundTargets_MainFrame")
+end
+
+local function TargetButton_OnClick(self, button)
+	local b = self or this
+	local btn = button or arg1
+	local name = b.targetName
+	if not name then return end
+
+	local guid = b.targetGUID or nameToGUID[name]
+	if btn == "LeftButton" then
+		if guid then
+			TargetUnit(guid)
+		else
+			TargetByName(name, true)
+		end
+	elseif btn == "RightButton" then
+		local isCurrentTarget = UnitExists("target") and (UnitName("target") == name)
+		if isCurrentTarget then
+			FocusUnit("target")
+		else
+			local hadPriorTarget = UnitExists("target")
+			if guid then
+				TargetUnit(guid)
+			else
+				TargetByName(name, true)
+			end
+			if UnitExists("target") and UnitName("target") == name then
+				FocusUnit("target")
+			end
+			if hadPriorTarget then
+				TargetLastTarget()
+			else
+				ClearTarget()
+			end
+		end
+	end
+end
+
 function BGT:CreateFrames()
 	if BGT.MainFrame then return end
 
@@ -463,15 +599,8 @@ function BGT:CreateFrames()
 	main:EnableMouse(BGT.isConfig and true or false)
 	main:Hide()
 
-	main:SetScript("OnMouseDown", function()
-		if BGT.isConfig then
-			this:StartMoving()
-		end
-	end)
-	main:SetScript("OnMouseUp", function()
-		this:StopMovingOrSizing()
-		BGT:Frame_SavePosition("BattlegroundTargets_MainFrame")
-	end)
+	main:SetScript("OnMouseDown", MainFrame_OnMouseDown)
+	main:SetScript("OnMouseUp", MainFrame_OnMouseUp)
 
 	main.MoveText = main:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	main.MoveText:SetPoint("CENTER", main, "CENTER", 0, 0)
@@ -562,40 +691,7 @@ function BGT:CreateFrames()
 
 		btn:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
 		btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-
-		btn:SetScript("OnClick", function()
-			local name = this.targetName
-			if not name then return end
-
-			local guid = this.targetGUID or nameToGUID[name]
-			if arg1 == "LeftButton" then
-				if guid then
-					TargetUnit(guid)
-				else
-					TargetByName(name, true)
-				end
-			elseif arg1 == "RightButton" then
-				local isCurrentTarget = UnitExists("target") and (UnitName("target") == name)
-				if isCurrentTarget then
-					FocusUnit("target")
-				else
-					local hadPriorTarget = UnitExists("target")
-					if guid then
-						TargetUnit(guid)
-					else
-						TargetByName(name, true)
-					end
-					if UnitExists("target") and UnitName("target") == name then
-						FocusUnit("target")
-					end
-					if hadPriorTarget then
-						TargetLastTarget()
-					else
-						ClearTarget()
-					end
-				end
-			end
-		end)
+		btn:SetScript("OnClick", TargetButton_OnClick)
 	end
 
 	BGT:Frame_SetupPosition("BattlegroundTargets_MainFrame")
@@ -719,7 +815,9 @@ local function RenderHealthForRow(index, name)
 	end
 
 	if dead and stealthedState[name] then
+		local entry = stealthedState[name]
 		stealthedState[name] = nil
+		ReleaseStealthEntry(entry)
 	end
 
 	UpdateRowStealthVisual(index, name)
@@ -791,7 +889,7 @@ function BGT:BattlefieldScoreUpdate(force)
 			BGT.Spy:OnBattlegroundChanged(false)
 		end
 		prevEnemyCount = -1
-		wipe(stealthedState)
+		ClearAllStealth()
 		wipe(guidToName)
 		BGT.MainFrame:Hide()
 		return
@@ -923,9 +1021,8 @@ local function ObserveUnit(unit)
 
 	local hp, hpMax
 	if UnitXP then
-		local ok1, cur = pcall(UnitXP, "health", unit)
-		local ok2, maxh = pcall(UnitXP, "maxhealth", unit)
-		if ok1 and ok2 and cur and maxh and maxh > 0 then
+		local ok, cur, maxh = pcall(GetUnitXPHealthPair, unit)
+		if ok and cur and maxh and maxh > 0 then
 			hp, hpMax = cur, maxh
 		end
 	end
@@ -955,6 +1052,7 @@ function BGT:EnableConfigMode(size)
 	BGT:CreateFrames()
 	BGT:SetupButtonLayout(currentSize)
 
+	ClearAllStealth()
 	enemyCount = currentSize
 	local classes = { "WARRIOR", "PRIEST", "MAGE", "DRUID", "HUNTER", "ROGUE", "SHAMAN", "PALADIN", "WARLOCK" }
 	for i = 1, currentSize do
@@ -966,16 +1064,14 @@ function BGT:EnableConfigMode(size)
 		deadState[e.name] = false
 		if e.classToken == "ROGUE" then
 			if i % 2 == 1 then
-				stealthedState[e.name] = { isStealthed = true, spellName = "Stealth", texture = "Interface\\Icons\\Ability_Stealth" }
+				SetUnitStealth(e.name, true, "Stealth", "Interface\\Icons\\Ability_Stealth", 0)
 			else
-				stealthedState[e.name] = { isStealthed = true, spellName = "Vanish", texture = "Interface\\Icons\\Ability_Stealth" }
+				SetUnitStealth(e.name, true, "Vanish", "Interface\\Icons\\Ability_Stealth", 0)
 			end
 		elseif e.classToken == "DRUID" and (i % 2 == 0) then
-			stealthedState[e.name] = { isStealthed = true, spellName = "Prowl", texture = PROWL_TEXTURE }
+			SetUnitStealth(e.name, true, "Prowl", PROWL_TEXTURE, 0)
 		elseif i == 3 then
-			stealthedState[e.name] = { isStealthed = true, spellName = "Invisibility", texture = "Interface\\Icons\\Spell_Nature_Invisibilty" }
-		else
-			stealthedState[e.name] = nil
+			SetUnitStealth(e.name, true, "Invisibility", "Interface\\Icons\\Spell_Nature_Invisibilty", 0)
 		end
 	end
 	for i = currentSize + 1, MAX_ENEMIES do
@@ -990,7 +1086,7 @@ end
 function BGT:DisableConfigMode()
 	BGT.isConfig = false
 	prevEnemyCount = -1
-	wipe(stealthedState)
+	ClearAllStealth()
 	for i = 1, MAX_ENEMIES do
 		local btn = BGT.TargetButton[i]
 		if btn then
@@ -1057,7 +1153,8 @@ BGT:RegisterEvent("CHAT_MSG_SPELL_AURA_GONE_OTHER")
 BGT:RegisterEvent("CHAT_MSG_SPELL_HOSTILEPLAYER_DAMAGE")
 BGT:RegisterEvent("CHAT_MSG_COMBAT_HOSTILEPLAYER_HITS")
 
-BGT:SetScript("OnEvent", function()
+local function BGT_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
+	event = event or event
 	if event == "PLAYER_LOGIN" then
 		BGT:EnsureOptions()
 		BGT:CreateFrames()
@@ -1076,7 +1173,7 @@ BGT:SetScript("OnEvent", function()
 		ObserveUnit(arg1)
 
 	elseif event == "UNIT_TARGET" then
-		if arg1 then ObserveUnit(arg1 .. "target") end
+		if arg1 then ObserveUnit(GetUnitTargetToken(arg1)) end
 
 	elseif event == "UPDATE_MOUSEOVER_UNIT" then
 		ObserveUnit("mouseover")
@@ -1186,7 +1283,8 @@ BGT:SetScript("OnEvent", function()
 			end
 		end
 	end
-end)
+end
+BGT:SetScript("OnEvent", BGT_OnEvent)
 
 -- -------------------------------------------------------------------------- --
 -- Periodic Scoreboard Poller (Hardware C_Timer.NewTicker, 3.0s cadence)      --

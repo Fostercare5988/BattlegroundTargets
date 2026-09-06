@@ -63,11 +63,18 @@ function BGT:CreateOptionsFrame()
 
 	tinsert(UISpecialFrames, "BattlegroundTargets_OptionsFrame")
 
-	f:SetScript("OnMouseDown", function() f:StartMoving() end)
-	f:SetScript("OnMouseUp", function()
-		f:StopMovingOrSizing()
+	local function OptionsFrame_OnMouseDown(self)
+		local frm = self or this or f
+		if frm and frm.StartMoving then frm:StartMoving() end
+	end
+	local function OptionsFrame_OnMouseUp(self)
+		local frm = self or this or f
+		if frm and frm.StopMovingOrSizing then frm:StopMovingOrSizing() end
 		BGT:Frame_SavePosition("BattlegroundTargets_OptionsFrame")
-	end)
+	end
+
+	f:SetScript("OnMouseDown", OptionsFrame_OnMouseDown)
+	f:SetScript("OnMouseUp", OptionsFrame_OnMouseUp)
 
 	-- Title Bar
 	local title = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -496,36 +503,49 @@ function BGT:CreateMinimapButton()
 		btn:SetPoint("CENTER", Minimap, "CENTER", x, y)
 	end
 
-	btn:RegisterForDrag("LeftButton")
-	btn:SetScript("OnDragStart", function()
-		this:SetScript("OnUpdate", function()
-			local cx, cy = GetCursorPosition()
-			local mx, my = Minimap:GetCenter()
-			local scale = Minimap:GetEffectiveScale()
-			cx = cx / scale
-			cy = cy / scale
-			local angle = math.deg(math.atan2(cy - my, cx - mx))
-			BattlegroundTargets_Options.MinimapButtonPos = angle
-			UpdatePos()
-		end)
-	end)
-	btn:SetScript("OnDragStop", function()
-		this:SetScript("OnUpdate", nil)
-	end)
+	local function MinimapButton_OnUpdate(self)
+		local cx, cy = GetCursorPosition()
+		local mx, my = Minimap:GetCenter()
+		local scale = Minimap:GetEffectiveScale()
+		cx = cx / scale
+		cy = cy / scale
+		local angle = math.deg(math.atan2(cy - my, cx - mx))
+		BattlegroundTargets_Options.MinimapButtonPos = angle
+		UpdatePos()
+	end
 
-	btn:SetScript("OnClick", function()
+	local function MinimapButton_OnDragStart(self)
+		local f = self or this or btn
+		f:SetScript("OnUpdate", MinimapButton_OnUpdate)
+	end
+
+	local function MinimapButton_OnDragStop(self)
+		local f = self or this or btn
+		f:SetScript("OnUpdate", nil)
+	end
+
+	local function MinimapButton_OnClick(self)
 		BGT:ToggleOptions()
-	end)
+	end
 
-	btn:SetScript("OnEnter", function()
-		GameTooltip:SetOwner(btn, "ANCHOR_LEFT")
+	local function MinimapButton_OnEnter(self)
+		local f = self or this or btn
+		GameTooltip:SetOwner(f, "ANCHOR_LEFT")
 		GameTooltip:SetText("BattlegroundTargets")
 		GameTooltip:AddLine("Click to open configuration.", 1, 1, 1)
 		GameTooltip:Show()
-	end)
-	btn:SetScript("OnLeave", function()
+	end
+
+	local function MinimapButton_OnLeave(self)
 		GameTooltip:Hide()
-	end)
+	end
+
+	btn:RegisterForDrag("LeftButton")
+	btn:SetScript("OnDragStart", MinimapButton_OnDragStart)
+	btn:SetScript("OnDragStop", MinimapButton_OnDragStop)
+	btn:SetScript("OnClick", MinimapButton_OnClick)
+	btn:SetScript("OnEnter", MinimapButton_OnEnter)
+	btn:SetScript("OnLeave", MinimapButton_OnLeave)
 
 	UpdatePos()
 	if not BattlegroundTargets_Options.MinimapButton then

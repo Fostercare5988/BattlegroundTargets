@@ -419,6 +419,91 @@ end
 -- -------------------------------------------------------------------------- --
 -- Spy Frame Creation                                                         --
 -- -------------------------------------------------------------------------- --
+local function SpyFrame_OnDragStart(self)
+	local f = self or this or (Spy and Spy.Frame)
+	if f and f.StartMoving then f:StartMoving() end
+end
+
+local function SpyFrame_OnDragStop(self)
+	local f = self or this or (Spy and Spy.Frame)
+	if f and f.StopMovingOrSizing then f:StopMovingOrSizing() end
+	Spy:SavePosition()
+end
+
+local function SpyClearBtn_OnClick(self)
+	Spy:ClearHistory()
+end
+
+local function SpyRow_OnClick(self, button)
+	local b = self or this
+	local btn = button or arg1
+	local tName = b.targetName
+	if not tName then return end
+	local tGUID = b.targetGUID or guidToName[tName]
+
+	if btn == "LeftButton" then
+		if tGUID then
+			TargetUnit(tGUID)
+		else
+			TargetByName(tName, true)
+		end
+	elseif btn == "RightButton" then
+		if tGUID then
+			FocusUnit(tGUID)
+		else
+			TargetByName(tName, true)
+			if UnitExists("target") and UnitName("target") == tName then
+				FocusUnit("target")
+			end
+		end
+	end
+end
+
+local function SpyRow_OnEnter(self)
+	local b = self or this
+	if not b.targetName then return end
+	GameTooltip:SetOwner(b, "ANCHOR_RIGHT")
+	GameTooltip:ClearLines()
+	GameTooltip:AddLine(b.targetName, 1, 1, 1)
+
+	local race = b.targetRace or (playerRaceCache and playerRaceCache[b.targetName])
+	local cls = FormatClass(b.targetClass)
+	local raceClassText = nil
+
+	if race and cls then
+		raceClassText = race .. " " .. cls
+	elseif race then
+		raceClassText = race
+	elseif cls then
+		raceClassText = cls
+	end
+
+	if raceClassText then
+		local color = (BGT.GetClassColor and BGT.GetClassColor(b.targetClass)) or { r = 0.8, g = 0.8, b = 0.8 }
+		GameTooltip:AddLine(raceClassText, color.r, color.g, color.b)
+	end
+
+	if b.targetLevel and b.targetLevel > 0 then
+		GameTooltip:AddLine("Level: " .. b.targetLevel, 1, 0.82, 0)
+	end
+	if b.targetHealth then
+		GameTooltip:AddLine("Health: " .. b.targetHealth .. "%", 0.2, 1, 0.2)
+	end
+	if b.targetStealth then
+		GameTooltip:AddLine("State: STEALTHED (" .. (b.targetStealthSpell or "Stealth") .. ")", 0.4, 0.6, 1)
+	end
+	if b.targetLastSeen and b.targetLastSeen > 0 then
+		local diff = math.max(0, math.floor(GetTime() - b.targetLastSeen))
+		GameTooltip:AddLine("Last Seen: " .. (diff < 60 and (diff .. "s ago") or (math.floor(diff / 60) .. "m ago")), 0.7, 0.7, 0.7)
+	end
+	GameTooltip:AddLine("Left-Click: Target  |  Right-Click: Focus", 0.5, 0.5, 0.5)
+	GameTooltip:Show()
+end
+
+local function SpyRow_OnLeave(self)
+	GameTooltip:Hide()
+end
+
 function Spy:CreateFrames()
 	if Spy.Frame then return end
 
@@ -440,11 +525,8 @@ function Spy:CreateFrames()
 	f:SetBackdropBorderColor(0.3, 0.3, 0.4, 0.9)
 
 	f:RegisterForDrag("LeftButton")
-	f:SetScript("OnDragStart", function() this:StartMoving() end)
-	f:SetScript("OnDragStop", function()
-		this:StopMovingOrSizing()
-		Spy:SavePosition()
-	end)
+	f:SetScript("OnDragStart", SpyFrame_OnDragStart)
+	f:SetScript("OnDragStop", SpyFrame_OnDragStop)
 
 	-- Header Title
 	local title = f:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
@@ -460,9 +542,7 @@ function Spy:CreateFrames()
 	local clearText = clearBtn:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
 	clearText:SetPoint("CENTER", 0, 0)
 	clearText:SetText("x")
-	clearBtn:SetScript("OnClick", function()
-		Spy:ClearHistory()
-	end)
+	clearBtn:SetScript("OnClick", SpyClearBtn_OnClick)
 
 	-- Pre-allocated Rows
 	f.rows = {}
@@ -526,72 +606,9 @@ function Spy:CreateFrames()
 		btn:EnableMouse(true)
 		btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 
-		btn:SetScript("OnClick", function()
-			local tName = this.targetName
-			if not tName then return end
-			local tGUID = this.targetGUID or guidToName[tName]
-
-			if arg1 == "LeftButton" then
-				if tGUID then
-					TargetUnit(tGUID)
-				else
-					TargetByName(tName, true)
-				end
-			elseif arg1 == "RightButton" then
-				if tGUID then
-					FocusUnit(tGUID)
-				else
-					TargetByName(tName, true)
-					if UnitExists("target") and UnitName("target") == tName then
-						FocusUnit("target")
-					end
-				end
-			end
-		end)
-
-		btn:SetScript("OnEnter", function()
-			if not this.targetName then return end
-			GameTooltip:SetOwner(this, "ANCHOR_RIGHT")
-			GameTooltip:ClearLines()
-			GameTooltip:AddLine(this.targetName, 1, 1, 1)
-
-			local race = this.targetRace or (playerRaceCache and playerRaceCache[this.targetName])
-			local cls = FormatClass(this.targetClass)
-			local raceClassText = nil
-
-			if race and cls then
-				raceClassText = race .. " " .. cls
-			elseif race then
-				raceClassText = race
-			elseif cls then
-				raceClassText = cls
-			end
-
-			if raceClassText then
-				local color = (BGT.GetClassColor and BGT.GetClassColor(this.targetClass)) or { r = 0.8, g = 0.8, b = 0.8 }
-				GameTooltip:AddLine(raceClassText, color.r, color.g, color.b)
-			end
-
-			if this.targetLevel and this.targetLevel > 0 then
-				GameTooltip:AddLine("Level: " .. this.targetLevel, 1, 0.82, 0)
-			end
-			if this.targetHealth then
-				GameTooltip:AddLine("Health: " .. this.targetHealth .. "%", 0.2, 1, 0.2)
-			end
-			if this.targetStealth then
-				GameTooltip:AddLine("State: STEALTHED (" .. (this.targetStealthSpell or "Stealth") .. ")", 0.4, 0.6, 1)
-			end
-			if this.targetLastSeen and this.targetLastSeen > 0 then
-				local diff = math.max(0, math.floor(GetTime() - this.targetLastSeen))
-				GameTooltip:AddLine("Last Seen: " .. (diff < 60 and (diff .. "s ago") or (math.floor(diff / 60) .. "m ago")), 0.7, 0.7, 0.7)
-			end
-			GameTooltip:AddLine("Left-Click: Target  |  Right-Click: Focus", 0.5, 0.5, 0.5)
-			GameTooltip:Show()
-		end)
-
-		btn:SetScript("OnLeave", function()
-			GameTooltip:Hide()
-		end)
+		btn:SetScript("OnClick", SpyRow_OnClick)
+		btn:SetScript("OnEnter", SpyRow_OnEnter)
+		btn:SetScript("OnLeave", SpyRow_OnLeave)
 
 		btn:Hide()
 		f.rows[i] = btn
@@ -875,7 +892,8 @@ eventFrame:RegisterEvent("CHAT_MSG_SPELL_AURA_GONE_OTHER")
 eventFrame:RegisterEvent("CHAT_MSG_SPELL_HOSTILEPLAYER_DAMAGE")
 eventFrame:RegisterEvent("CHAT_MSG_COMBAT_HOSTILEPLAYER_HITS")
 
-eventFrame:SetScript("OnEvent", function()
+local function Spy_OnEvent(self, event, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
+	event = event or event
 	if event == "PLAYER_LOGIN" then
 		Spy:CreateFrames()
 		return
@@ -1028,4 +1046,5 @@ eventFrame:SetScript("OnEvent", function()
 			end
 		end
 	end
-end)
+end
+eventFrame:SetScript("OnEvent", Spy_OnEvent)

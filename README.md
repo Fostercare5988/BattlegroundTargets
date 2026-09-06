@@ -2,7 +2,7 @@
 
 [![Client](https://img.shields.io/badge/Client-1.12.1%20Vanilla-blue.svg)](#)
 [![Engine](https://img.shields.io/badge/Engine-Enhanced%201.12.1-brightgreen.svg)](#)
-[![Version](https://img.shields.io/badge/Version-v3.3.0-blue.svg)](#)
+[![Version](https://img.shields.io/badge/Version-v3.4.0-blue.svg)](#)
 [![ClassicAPI](https://img.shields.io/badge/ClassicAPI-v1.14.0+-orange.svg)](#)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-v2.2+-brightgreen.svg)](#)
 [![DXVK](https://img.shields.io/badge/DXVK-Vulkan-red.svg)](#)
@@ -90,7 +90,11 @@ BattlegroundTargets/
 ---
 
 ## ⚡ Performance Profile
-
+ 
+- **Zero Combat Closures**: Static function references for all button and frame scripts eliminate runtime anonymous function allocations.
+- **Recycled Stealth Table Pool**: Object pooling (`stealthEntryPool`) and an event-gated OnUpdate watcher completely eliminate table churn during stealth and vanish detection.
+- **Consolidated UnitXP Telemetry**: Health and max health pairs are retrieved via a single pcall helper, halving protection boundary crossings.
+- **Unit Target String Memoization**: Static cache pre-populates target tokens (`player`, `party1..4`, `raid1..40`), preventing string concatenation during target updates.
 - **Zero Combat Taint**: Completely bypasses retail protected frame restrictions.
 - **Zero Click Interception**: All decorative textures and overlay fontstrings have mouse events disabled.
 - **Zero Foreign Locale Bloat**: 100% pure English standard.
