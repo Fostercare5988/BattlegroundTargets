@@ -3,7 +3,7 @@
 [![Client](https://img.shields.io/badge/Client-1.12.1%20Vanilla-blue.svg)](#)
 [![Engine](https://img.shields.io/badge/Engine-Enhanced%201.12.1-brightgreen.svg)](#)
 [![Version](https://img.shields.io/badge/Version-v3.3.0-blue.svg)](#)
-[![ClassicAPI](https://img.shields.io/badge/ClassicAPI-v1.13.4+-orange.svg)](#)
+[![ClassicAPI](https://img.shields.io/badge/ClassicAPI-v1.14.0+-orange.svg)](#)
 [![SuperWoW](https://img.shields.io/badge/SuperWoW-v2.2+-brightgreen.svg)](#)
 [![DXVK](https://img.shields.io/badge/DXVK-Vulkan-red.svg)](#)
 [![License](https://img.shields.io/badge/License-GPLv2-yellow.svg)](#)
@@ -20,7 +20,7 @@ To run this modernized build, the following client extensions are strictly requi
 
 | Component | Minimum Version | Architectural Role |
 | :--- | :---: | :--- |
-| **ClassicAPI.dll** | `v1.13.4+` | Modern Lua environment, native `table.wipe`, C_Timer, nameplate token telemetry (`NAME_PLATE_UNIT_ADDED`), and native focus support. |
+| **ClassicAPI.dll** | `v1.14.0+` | Modern Lua environment, native `table.wipe`, C_Timer, nameplate token telemetry (`NAME_PLATE_UNIT_ADDED`), and native focus support. |
 | **SuperWoW.dll** | `v2.2+` | Direct GUID targeting via `TargetUnit(guid)` and exact-name targeting via `TargetByName(name, true)`. |
 | **NamPower.dll** | `v4.6.3+` | Fast hardware spell querying & event routing. |
 | **UnitXP SP3** | `v90+` | Accurate numerical health & unit telemetry (`UnitXP("health", unit)`). |
